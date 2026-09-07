@@ -1,0 +1,77 @@
+name: Four fresh Promptr downloads and install variants
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: promptr-four-fresh-downloads
+  cancel-in-progress: false
+env:
+  PROMPTR_VSIX_URL: https://open-vsx.org/api/aryansudhir/promptr/1.5.6/file/aryansudhir.promptr-1.5.6.vsix
+  EXPECTED_VSIX_SHA256: a425bcf89666536d8b4946bf4fec7fc74878f3f27834fab7f4c5781b86272e97
+jobs:
+  test:
+    name: Fresh VM + fresh VSIX download (${{ matrix.variant }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        variant: [manifest, clean-state, unauthenticated, ui-settings]
+    env:
+      TEST_VARIANT: ${{ matrix.variant }}
+      TEST_RUN: ${{ matrix.variant }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Download Promptr freshly on this VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          date -u +%Y-%m-%dT%H:%M:%SZ | tee input/download-start.txt
+          curl --fail --location --retry 3 --retry-all-errors --no-keepalive \
+            -H 'Cache-Control: no-cache' \
+            "$PROMPTR_VSIX_URL" -o input/promptr.vsix
+          date -u +%Y-%m-%dT%H:%M:%SZ | tee input/download-finished.txt
+          test -s input/promptr.vsix
+          actual="$(sha256sum input/promptr.vsix | awk '{print $1}')"
+          test "$actual" = "$EXPECTED_VSIX_SHA256"
+          printf 'runner=%s\nrunner_os=%s\nrunner_arch=%s\nworkflow_run=%s\njob=%s\nvariant=%s\nbytes=%s\nsha256=%s\n' \
+            "$RUNNER_NAME" "$RUNNER_OS" "$RUNNER_ARCH" "$GITHUB_RUN_ID" "$GITHUB_JOB" "$TEST_VARIANT" \
+            "$(stat -c '%s' input/promptr.vsix)" "$actual" | tee input/download-metadata.txt
+          unzip -t input/promptr.vsix
+      - name: Install desktop test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb scrot libgtk-3-0 libnss3 libasound2t64 libgbm1 libxss1
+          npm ci --ignore-scripts
+      - name: Install VS Code and freshly downloaded Promptr, run variant
+        run: xvfb-run -a --server-args='-screen 0 1280x900x24' node extended-run-test.cjs
+      - name: Save per-VM evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fresh-download-${{ matrix.variant }}
+          path: results/
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Wipe this VM test session
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- "$GITHUB_WORKSPACE/state" "$GITHUB_WORKSPACE/.vscode-test" \
+            "$GITHUB_WORKSPACE/input" "$GITHUB_WORKSPACE/node_modules" "$GITHUB_WORKSPACE/results"
+          for path in state .vscode-test input node_modules results; do
+            test ! -e "$GITHUB_WORKSPACE/$path"
+          done
+          echo "Wiped test state, VS Code download, fresh VSIX, npm dependencies, and evidence from $RUNNER_NAME."
+          echo 'This standard GitHub-hosted VM is decommissioned automatically after the job.'

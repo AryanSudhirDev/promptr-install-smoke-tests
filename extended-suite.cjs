@@ -1,0 +1,97 @@
+const vscode = require('vscode');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const cp = require('node:child_process');
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+exports.run = async () => {
+  const out = process.env.RESULTS_DIR;
+  const variant = process.env.TEST_VARIANT || 'unknown';
+  const checks = [];
+  const record = (name, details) => checks.push({name, status: 'passed', details});
+  try {
+    const target = vscode.extensions.getExtension('aryansudhir.promptr');
+    assert(target, 'VS Code extension API cannot find installed Promptr');
+    assert.equal(target.packageJSON.version, '1.5.6');
+    record('Installed published extension discovered', `${target.id}@${target.packageJSON.version}`);
+
+    await Promise.race([
+      target.activate(),
+      new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Activation timed out after 30 seconds')), 30000); timer.unref(); }),
+    ]);
+    assert(target.isActive, 'Promptr did not become active');
+    record('Extension activation', true);
+
+    const declared = target.packageJSON.contributes?.commands || [];
+    const expectedCommands = ['promptr.generatePrompt', 'promptr.setTemperature', 'promptr.setCustomContext', 'promptr.enterAccessToken'];
+    for (const expected of expectedCommands) assert(declared.some(c => c.command === expected), `Missing command declaration: ${expected}`);
+    const actual = await vscode.commands.getCommands(true);
+    for (const command of declared) assert(actual.includes(command.command), `Missing registered command: ${command.command}`);
+    record('All four commands declared and registered', declared.map(c => c.command));
+
+    const bindings = target.packageJSON.contributes?.keybindings || [];
+    assert(bindings.some(b => b.command === 'promptr.generatePrompt' && b.key === 'shift+ctrl+g' && b.mac === 'shift+cmd+g'), 'Expected Promptr keyboard shortcut is missing');
+    record('Cross-platform keybinding contribution', bindings);
+
+    const config = vscode.workspace.getConfiguration('promptr');
+    assert.equal(config.get('temperature'), 0.3, 'Unexpected clean-install temperature');
+    assert.equal(config.get('customContext'), '', 'Unexpected clean-install custom context');
+    const temperatureInspect = config.inspect('temperature');
+    const contextInspect = config.inspect('customContext');
+    assert.equal(temperatureInspect?.defaultValue, 0.3, 'Temperature schema default changed');
+    assert.equal(contextInspect?.defaultValue, '', 'Custom context schema default changed');
+    await config.update('temperature', 0.6, vscode.ConfigurationTarget.Global);
+    await delay(200);
+    assert.equal(vscode.workspace.getConfiguration('promptr').get('temperature'), 0.6, 'Temperature setting did not persist');
+    await config.update('temperature', undefined, vscode.ConfigurationTarget.Global);
+    await delay(200);
+    assert.equal(vscode.workspace.getConfiguration('promptr').get('temperature'), 0.3, 'Temperature setting did not reset');
+    record('Clean defaults and temperature round-trip', {temperature: 0.3, customContext: '', changedAndReset: true});
+
+    if (variant === 'manifest') {
+      assert.equal(target.packageJSON.main, './dist/extension.js');
+      assert(fs.existsSync(path.join(target.extensionPath, target.packageJSON.main)), 'Compiled extension entrypoint is missing from installed VSIX');
+      const configurationProperties = Object.keys(target.packageJSON.contributes?.configuration?.properties || {});
+      for (const key of ['promptr.temperature', 'promptr.customContext', 'promptr.apiBase', 'promptr.backendApiUrl']) assert(configurationProperties.includes(key), `Missing configuration property: ${key}`);
+      record('VSIX manifest and compiled entrypoint integrity', {main: target.packageJSON.main, configurationProperties});
+    }
+
+    if (variant === 'clean-state') {
+      assert.equal(vscode.extensions.all.filter(ext => ext.id.toLowerCase() === 'aryansudhir.promptr').length, 1, 'Promptr appears more than once in a clean profile');
+      assert.equal(vscode.workspace.getConfiguration('promptr').get('autoValidate'), true, 'Clean profile autoValidate default changed');
+      record('Clean profile contains exactly one Promptr extension', {autoValidate: true});
+    }
+
+    if (variant === 'unauthenticated') {
+      let fetchCalls = 0;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (...args) => { fetchCalls++; throw new Error(`Unexpected network request during no-token smoke test: ${String(args[0])}`); };
+      try {
+        await vscode.commands.executeCommand('promptr.generatePrompt');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      assert.equal(fetchCalls, 0, 'Unauthenticated command attempted a backend request');
+      record('Unauthenticated command path avoids backend request', {fetchCalls, accessTokenProvided: false});
+    }
+
+    if (variant === 'ui-settings') {
+      const document = await vscode.workspace.openTextDocument({language: 'plaintext', content: 'Promptr clean-install UI smoke test.\nNo account token or backend request is used.\n'});
+      await vscode.window.showTextDocument(document);
+      await vscode.commands.executeCommand('workbench.action.quickOpen', '>Promptr');
+      await delay(1500);
+      cp.execFileSync('scrot', [path.join(out, 'promptr-command-palette.png')], {timeout: 15000});
+      record('Command palette and status bar UI screenshot captured', 'promptr-command-palette.png');
+      await vscode.commands.executeCommand('workbench.action.closeQuickOpen');
+    }
+
+    fs.writeFileSync(path.join(out, 'checks.json'), JSON.stringify({variant, status: 'passed', checks, notTested: ['Authenticated prompt refinement', 'Cursor integration', 'Windows/macOS compatibility']}, null, 2));
+    console.log(`PROMPTR_EXTENDED_SMOKE_TEST_PASSED ${JSON.stringify({variant, checks})}`);
+  } catch (error) {
+    fs.writeFileSync(path.join(out, 'checks.json'), JSON.stringify({variant, status: 'failed', checks, error: String(error.stack || error)}, null, 2));
+    try { cp.execFileSync('scrot', [path.join(out, 'failure.png')], {timeout: 15000}); } catch {}
+    throw error;
+  }
+};
