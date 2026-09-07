@@ -1,19 +1,19 @@
 name: Promptr install reliability monitor
 
 # Design (zero idle runner time):
-# - GitHub's cron (every 2 hours) fires whenever GitHub gets to it (it is best-effort and often late).
+# - GitHub's cron (every 30 minutes, also triggered from the iMac) fires whenever GitHub gets to it.
 # - The plan job resolves the published Open VSX version/hash once per run and checks the registry
 #   is reachable; if it is not, the run exits quietly with no test jobs instead of a burst of failures.
 # - Each run looks at previous runs of this workflow to find the newest slot already attempted,
 #   then runs every planned slot that has come due since then (catch-up), and exits.
 # - No runner ever sleeps or waits. Runner usage is only the ~1 minute each test takes.
-# - A date-seeded plan picks 8-16 changing UTC hours per day and spreads 70-90 tests across them,
-#   so the daily volume and timing vary while remaining reproducible. Actual start times drift
+# - A date-seeded plan spreads 70-90 tests across all 48 half-hour slots of the day (1-3 per slot),
+#   so the monitor is a steady trickle; the exact count per slot varies daily but is reproducible. Actual start times drift
 #   with GitHub's schedule delays, which is acceptable for reliability monitoring.
 
 on:
   schedule:
-    - cron: '7 */2 * * *'
+    - cron: '7,37 * * * *'
   workflow_dispatch:
     inputs:
       force_count:
@@ -82,14 +82,14 @@ jobs:
           : > attempted.txt
           for id in $(node -e "for (const r of require('./runs.json')) console.log(r.databaseId)"); do
             gh api --paginate "repos/${GH_REPO}/actions/runs/${id}/jobs" --jq '.jobs[].name' 2>/dev/null \
-              | grep -oE '[0-9]{8}-h[0-9]{2}-[0-9]{2}' >> attempted.txt || true
+              | grep -oE '[0-9]{8}-s[0-9]{4}-[0-9]{2}' >> attempted.txt || true
           done
           node > plan.json <<'NODE'
           const fs = require('node:fs');
           const now = new Date();
           const forceCount = Math.max(0, Math.min(65, Number(process.env.FORCE_COUNT || 0)));
-          const maxCatchUpJobs = 32;          // upper bound per run, keeps bursts modest
-          const maxLookbackHours = 12;        // slots older than this are simply skipped
+          const maxCatchUpJobs = 8;           // upper bound per run: outages recover as a trickle, not a burst
+          const maxLookbackHours = 6;         // slots older than this are simply skipped
           const variants = ['manifest', 'clean-state', 'settings-isolation', 'ui-settings', 'reinstall', 'duplicate-install'];
 
           function planFor(date) {
@@ -109,27 +109,28 @@ jobs:
               }
               return values;
             };
+            // 70-90 checks spread across all 48 half-hour slots (:07 and :37), 1-3 per slot, so the
+            // monitor runs as a steady trickle all day instead of hourly bursts.
             const total = 70 + Math.floor(random() * 21);
-            const slotCount = 8 + Math.floor(random() * 9);
-            const selectedHours = shuffle(Array.from({length: 24}, (_, hour) => hour)).slice(0, slotCount).sort((a, b) => a - b);
-            const counts = Array(24).fill(0);
-            for (const hour of selectedHours) counts[hour] = 1;
-            for (let i = selectedHours.length; i < total; i++) {
-              counts[selectedHours[Math.floor(random() * selectedHours.length)]]++;
-            }
+            const slots = Array.from({length: 48}, (_, i) => i); // 0 = 00:07, 1 = 00:37, ...
+            const counts = Array(48).fill(1);
+            for (let i = 48; i < total; i++) counts[Math.floor(random() * 48)]++;
             const jobs = [];
-            for (const hour of selectedHours) {
-              for (let index = 0; index < counts[hour]; index++) {
+            for (const slot of slots) {
+              const hh = String(Math.floor(slot / 2)).padStart(2, '0');
+              const mm = slot % 2 ? '37' : '07';
+              for (let index = 0; index < counts[slot]; index++) {
                 const serial = jobs.length;
                 jobs.push({
-                  id: `${date.replaceAll('-', '')}-h${String(hour).padStart(2, '0')}-${String(index).padStart(2, '0')}`,
+                  id: `${date.replaceAll('-', '')}-s${hh}${mm}-${String(index).padStart(2, '0')}`,
                   variant: variants[(serial + Math.floor(random() * variants.length)) % variants.length],
-                  slot: `${date}T${String(hour).padStart(2, '0')}:07:00Z`,
+                  slot: `${date}T${hh}:${mm}:00Z`,
                   plannedDate: date,
                   plannedTotal: total,
                 });
               }
             }
+            const selectedHours = Array.from({length: 24}, (_, h) => h);
             return {date, total, selectedHours, jobs};
           }
 
@@ -145,10 +146,10 @@ jobs:
             mode = 'catch-up';
             const lookbackFloor = now.getTime() - maxLookbackHours * 3600000;
             // Never re-run a slot that any earlier run already attempted (pass or fail).
-            const attemptedSlots = new Set([...attempted].map(id => id.slice(0, 12)));
+            const attemptedSlots = new Set([...attempted].map(id => id.slice(0, 14)));
             jobs = days.flatMap(p => p.jobs).filter(job => {
               const t = new Date(job.slot).getTime();
-              return t <= now.getTime() && t >= lookbackFloor && !attemptedSlots.has(job.id.slice(0, 12));
+              return t <= now.getTime() && t >= lookbackFloor && !attemptedSlots.has(job.id.slice(0, 14));
             });
             // Prefer the most recent slots if there is a large backlog.
             jobs.sort((a, b) => new Date(b.slot) - new Date(a.slot));
@@ -174,7 +175,7 @@ jobs:
             echo "## Promptr install reliability check"
             echo "- Published release under test: Promptr ${{ steps.registry.outputs.version }} (sha256 ${{ steps.registry.outputs.sha256 }})"
             echo "- Trigger: ${{ github.event_name }} (mode: $(field mode)) at $(field nowUtc)"
-            echo "- Today's plan (UTC $(field todayPlan.date)): $(field todayPlan.total) tests across hours $(node -e "process.stdout.write(require('./plan.json').todayPlan.hours.join(','))")"
+            echo "- Today's plan (UTC $(field todayPlan.date)): $(field todayPlan.total) checks spread over 48 half-hour slots"
             echo "- Due slots handled in this run: $(node -e "process.stdout.write(require('./plan.json').dueSlots.join(', ') || 'none')")"
             echo "- Clean-install checks in this run: $count"
             echo "- Each check installs the published release on its own fresh VM and verifies activation; no runner idles between slots."
@@ -188,7 +189,7 @@ jobs:
     timeout-minutes: 12
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 2
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       TEST_VARIANT: ${{ matrix.variant }}

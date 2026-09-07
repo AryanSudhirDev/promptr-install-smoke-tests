@@ -19,7 +19,7 @@ Promptr has real users who install it from Open VSX. A publishing regression, a 
 
 ## Schedule and volume
 
-`Promptr install reliability monitor` runs on a GitHub Actions schedule (every 2 hours, best-effort). A date-seeded plan chooses 8-16 UTC hours per day and spreads 70-90 tests across them, so timing and volume vary day to day but remain reproducible. Each run looks at previous runs to find which planned slots are still due, runs those, and exits. No runner ever idles between slots.
+`Promptr install reliability monitor` runs on a GitHub Actions schedule (every 2 hours, best-effort). A date-seeded plan spreads 70-90 checks across all 48 half-hour slots of the day (1-3 per slot), so the monitor runs as a steady trickle rather than bursts; per-slot counts vary daily but are reproducible. Each run looks at previous runs to find which planned slots are still due, runs those, and exits. No runner ever idles between slots.
 
 Per run: one Open VSX API call to resolve the published version and hash. Per test: one VSIX download. If Open VSX is unreachable the run exits without scheduling tests.
 
