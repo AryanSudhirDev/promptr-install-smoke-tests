@@ -1,0 +1,14 @@
+{
+  "name": "promptr-daytona-install-checks",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Runs Promptr clean-install checks in disposable Daytona sandboxes.",
+  "scripts": {
+    "build-snapshot": "node build-snapshot.mjs",
+    "batch": "node run-batch.mjs"
+  },
+  "dependencies": {
+    "@daytona/sdk": "0.210.0"
+  }
+}

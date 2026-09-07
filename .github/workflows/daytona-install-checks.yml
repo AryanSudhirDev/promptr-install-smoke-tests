@@ -1,0 +1,65 @@
+name: Promptr clean-install checks (Daytona sandboxes)
+
+# Runs batches of Promptr clean-install checks in disposable Daytona sandboxes.
+# - The GitHub job only orchestrates: it resolves the published release on Open VSX ONCE per batch,
+#   fetches the VSIX once, and uploads that verified artifact into each fresh sandbox.
+# - Each sandbox installs VS Code-from-image + the VSIX from a clean state, verifies activation,
+#   commands, settings and keybinding, then is deleted. Sandboxes never contact Open VSX.
+# - Batch size comes from the repository variable DAYTONA_CHECKS_PER_RUN (default 12).
+#   With the 3-hour schedule below that is ~96 checks/day. Change the variable, not this file.
+
+on:
+  schedule:
+    - cron: '37 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      check_count:
+        description: 'Checks in this batch (1-60). Empty = repository variable DAYTONA_CHECKS_PER_RUN or 12'
+        required: false
+        default: ''
+        type: string
+      concurrency:
+        description: 'Sandboxes at once (1-3)'
+        required: false
+        default: '3'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promptr-daytona-install-checks
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    name: Run a batch of sandbox checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install orchestrator dependencies
+        working-directory: daytona
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run the batch
+        working-directory: daytona
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+          CHECK_COUNT: ${{ inputs.check_count || vars.DAYTONA_CHECKS_PER_RUN || '12' }}
+          CONCURRENCY: ${{ inputs.concurrency || '3' }}
+          BATCH_ID: gh${{ github.run_id }}
+          OUTPUT_DIR: ${{ github.workspace }}/daytona-results
+        run: node run-batch.mjs
+      - name: Save batch reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: daytona-batch-${{ github.run_id }}
+          path: daytona-results/
+          if-no-files-found: warn
+          retention-days: 2

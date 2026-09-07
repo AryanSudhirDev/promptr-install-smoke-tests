@@ -23,6 +23,10 @@ Promptr has real users who install it from Open VSX. A publishing regression, a 
 
 Per run: one Open VSX API call to resolve the published version and hash. Per test: one VSIX download. If Open VSX is unreachable the run exits without scheduling tests.
 
+## Daytona sandbox checks
+
+`Promptr clean-install checks (Daytona sandboxes)` runs the same clean-install check in disposable [Daytona](https://www.daytona.io) sandboxes, every 3 hours in batches (size set by the repository variable `DAYTONA_CHECKS_PER_RUN`, default 12). The GitHub job only orchestrates: it resolves the published release on Open VSX once per batch, fetches the VSIX once and verifies its SHA-256, then uploads that artifact into each fresh sandbox. The sandbox image (`daytona/build-snapshot.mjs`) contains desktop VS Code from Microsoft's apt repository, Xvfb and the test harness dependency, and no Promptr artifact. Sandboxes never contact Open VSX; each one is deleted after its report is collected. A check takes roughly 10 seconds and about $0.0005 of sandbox compute.
+
 ## What this does not do
 
 - no Promptr access token, no account creation, no paid AI requests, no production publishing
@@ -33,3 +37,5 @@ Per run: one Open VSX API call to resolve the published version and hash. Per te
 
 - `.github/workflows/daily-health-qa.yml` - `Promptr install reliability monitor`, the scheduled check described above
 - `.github/workflows/four-fresh-downloads.yml` - `Promptr clean-install variants (manual)`, a one-off four-variant run
+- `.github/workflows/daytona-install-checks.yml` - `Promptr clean-install checks (Daytona sandboxes)`, scheduled sandbox batches
+- `.github/workflows/daytona-snapshot.yml` - manual rebuild of the Daytona sandbox image

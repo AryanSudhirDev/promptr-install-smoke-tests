@@ -1,0 +1,37 @@
+name: Rebuild Daytona check image (manual)
+
+# Rebuilds the sandbox image used by the Daytona clean-install checks. Run this after changing
+# daytona/build-snapshot.mjs (e.g. new VS Code apt channel or harness dependency). Use a new
+# SNAPSHOT_NAME (e.g. promptr-install-check-v2) and then update the batch workflow/variable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_name:
+        description: 'Snapshot name to create'
+        required: true
+        default: 'promptr-install-check-v1'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - working-directory: daytona
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - working-directory: daytona
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+          SNAPSHOT_NAME: ${{ inputs.snapshot_name }}
+        run: node build-snapshot.mjs
