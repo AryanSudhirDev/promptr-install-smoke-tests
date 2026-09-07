@@ -276,4 +276,5 @@ jobs:
       - name: Publish status and download history to the data branch
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_DAILY_TOTAL: ${{ vars.MONITOR_CHECKS_PER_DAY || '' }}
         run: node scripts/publish-status.mjs

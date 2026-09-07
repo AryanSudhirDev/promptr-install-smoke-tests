@@ -41,7 +41,7 @@ try {
 
 // --- 3. configured daily totals ----------------------------------------------------------------
 let githubTotal = null, imacTotal = null;
-try { githubTotal = Number((await gh(`/repos/${REPO}/actions/variables/MONITOR_CHECKS_PER_DAY`))?.value) || null; } catch {}
+githubTotal = Number(process.env.GITHUB_DAILY_TOTAL) || null;
 try {
   const r = await fetch(`https://raw.githubusercontent.com/${REPO}/main/monitor-config.json?t=${Date.now()}`);
   if (r.ok) imacTotal = Number((await r.json()).imacDailyTotal) || null;
