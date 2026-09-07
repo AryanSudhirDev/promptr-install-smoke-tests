@@ -66,15 +66,25 @@ exports.run = async () => {
 
     if (variant === 'unauthenticated') {
       let fetchCalls = 0;
+      let inputPromptCount = 0;
+      const errorMessages = [];
       const originalFetch = globalThis.fetch;
+      const originalInputBox = vscode.window.showInputBox;
+      const originalErrorMessage = vscode.window.showErrorMessage;
       globalThis.fetch = async (...args) => { fetchCalls++; throw new Error(`Unexpected network request during no-token smoke test: ${String(args[0])}`); };
+      vscode.window.showInputBox = async () => { inputPromptCount++; return undefined; };
+      vscode.window.showErrorMessage = async (message, ...items) => { errorMessages.push({message, items}); return undefined; };
       try {
         await vscode.commands.executeCommand('promptr.generatePrompt');
       } finally {
         globalThis.fetch = originalFetch;
+        vscode.window.showInputBox = originalInputBox;
+        vscode.window.showErrorMessage = originalErrorMessage;
       }
+      assert.equal(inputPromptCount, 1, 'No-token command did not request an access token');
       assert.equal(fetchCalls, 0, 'Unauthenticated command attempted a backend request');
-      record('Unauthenticated command path avoids backend request', {fetchCalls, accessTokenProvided: false});
+      assert(errorMessages.some(item => item.message.includes('Please enter your Promptr access token')), 'No-token error message was not shown');
+      record('Unauthenticated command path cancels safely without backend request', {fetchCalls, inputPromptCount, errorMessages, accessTokenProvided: false});
     }
 
     if (variant === 'ui-settings') {
