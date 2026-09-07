@@ -7,7 +7,7 @@ name: Promptr install reliability monitor
 # - Each run looks at previous runs of this workflow to find the newest slot already attempted,
 #   then runs every planned slot that has come due since then (catch-up), and exits.
 # - No runner ever sleeps or waits. Runner usage is only the ~1 minute each test takes.
-# - A date-seeded plan picks 8-16 changing UTC hours per day and spreads 45-65 tests across them,
+# - A date-seeded plan picks 8-16 changing UTC hours per day and spreads 70-90 tests across them,
 #   so the daily volume and timing vary while remaining reproducible. Actual start times drift
 #   with GitHub's schedule delays, which is acceptable for reliability monitoring.
 
@@ -88,7 +88,7 @@ jobs:
           const fs = require('node:fs');
           const now = new Date();
           const forceCount = Math.max(0, Math.min(65, Number(process.env.FORCE_COUNT || 0)));
-          const maxCatchUpJobs = 24;          // upper bound per run, keeps bursts modest
+          const maxCatchUpJobs = 32;          // upper bound per run, keeps bursts modest
           const maxLookbackHours = 12;        // slots older than this are simply skipped
           const variants = ['manifest', 'clean-state', 'settings-isolation', 'ui-settings', 'reinstall', 'duplicate-install'];
 
@@ -109,7 +109,7 @@ jobs:
               }
               return values;
             };
-            const total = 45 + Math.floor(random() * 21);
+            const total = 70 + Math.floor(random() * 21);
             const slotCount = 8 + Math.floor(random() * 9);
             const selectedHours = shuffle(Array.from({length: 24}, (_, hour) => hour)).slice(0, slotCount).sort((a, b) => a - b);
             const counts = Array(24).fill(0);
@@ -188,7 +188,7 @@ jobs:
     timeout-minutes: 12
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 6
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       TEST_VARIANT: ${{ matrix.variant }}
