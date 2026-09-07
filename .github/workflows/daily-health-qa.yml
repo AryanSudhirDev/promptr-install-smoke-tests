@@ -1,16 +1,34 @@
 name: Daily Promptr health QA (45-65 fresh downloads)
 
+# How this stays autonomous:
+# - Each run is one link in a self-dispatching chain. It sleeps until the next planned
+#   :07 UTC slot, runs that slot's fresh-VM tests, then dispatches the next run itself.
+#   workflow_dispatch triggers are picked up almost immediately by GitHub, unlike cron.
+# - The hourly cron below is only a watchdog: GitHub's schedule event is best-effort and
+#   can be hours late, but whenever it does fire it simply becomes the next link if the
+#   chain has died. The concurrency group guarantees at most one active chain.
+# - A date-seeded plan picks 8-16 changing UTC hours per day and spreads 45-65 tests
+#   across them, so timing and volume vary day to day while remaining reproducible.
+
 on:
-  # The planner runs once per hour. A seeded daily plan chooses 8-16 changing UTC hours
-  # and distributes exactly 45-65 clean-install jobs across those hours.
   schedule:
     - cron: '7 * * * *'
   workflow_dispatch:
     inputs:
       force_count:
-        description: 'Optional small validation run now; scheduled runs ignore this'
+        description: 'Run this many tests immediately instead of waiting for the next slot (0 = normal chain link)'
         required: false
         default: '0'
+        type: string
+      chain:
+        description: 'Dispatch the next link when this run ends (set false for a one-off validation)'
+        required: false
+        default: 'true'
+        type: string
+      after_slot:
+        description: 'Internal: ISO time of the slot the previous link already handled'
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -20,96 +38,154 @@ concurrency:
   group: promptr-daily-health-qa
   cancel-in-progress: false
 
+env:
+  MAX_WAIT_MINUTES: '300'
+
 jobs:
   plan:
-    name: Plan today\'s changing QA slots
+    name: Wait for the next planned slot
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 330
     outputs:
       should_run: ${{ steps.plan.outputs.should_run }}
+      chain: ${{ steps.plan.outputs.chain }}
       matrix: ${{ steps.plan.outputs.matrix }}
       planned_total: ${{ steps.plan.outputs.planned_total }}
       planned_date: ${{ steps.plan.outputs.planned_date }}
       planned_hours: ${{ steps.plan.outputs.planned_hours }}
+      target_slot: ${{ steps.plan.outputs.target_slot }}
+      completed_slot: ${{ steps.plan.outputs.completed_slot }}
     steps:
       - id: plan
         env:
           FORCE_COUNT: ${{ inputs.force_count || '0' }}
+          CHAIN_INPUT: ${{ inputs.chain || 'true' }}
+          AFTER_SLOT: ${{ inputs.after_slot || '' }}
         shell: bash
         run: |
           set -euo pipefail
           node > plan.json <<'NODE'
           const fs = require('node:fs');
           const now = new Date();
-          const date = now.toISOString().slice(0, 10);
-          const currentHour = now.getUTCHours();
           const forceCount = Math.max(0, Math.min(65, Number(process.env.FORCE_COUNT || 0)));
-          let seed = 2166136261;
-          for (const byte of Buffer.from(date)) {
-            seed ^= byte;
-            seed = Math.imul(seed, 16777619) >>> 0;
-          }
-          const random = () => {
-            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-            return seed / 4294967296;
-          };
-          const shuffle = (values) => {
-            for (let i = values.length - 1; i > 0; i--) {
-              const j = Math.floor(random() * (i + 1));
-              [values[i], values[j]] = [values[j], values[i]];
-            }
-            return values;
-          };
+          const maxWaitSeconds = Number(process.env.MAX_WAIT_MINUTES || 300) * 60;
+          const graceSeconds = 20 * 60;
+          const afterSlot = process.env.AFTER_SLOT ? new Date(process.env.AFTER_SLOT) : null;
           const variants = ['manifest', 'clean-state', 'settings-isolation', 'ui-settings', 'reinstall', 'duplicate-install'];
-          const total = forceCount || 45 + Math.floor(random() * 21);
-          const slotCount = forceCount ? 1 : 8 + Math.floor(random() * 9);
-          const selectedHours = shuffle(Array.from({length: 24}, (_, hour) => hour)).slice(0, slotCount).sort((a, b) => a - b);
-          const counts = Array(24).fill(0);
-          for (const hour of selectedHours) counts[hour] = 1;
-          for (let i = selectedHours.length; i < total; i++) {
-            counts[selectedHours[Math.floor(random() * selectedHours.length)]]++;
+
+          function planFor(date) {
+            let seed = 2166136261;
+            for (const byte of Buffer.from(date)) {
+              seed ^= byte;
+              seed = Math.imul(seed, 16777619) >>> 0;
+            }
+            const random = () => {
+              seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+              return seed / 4294967296;
+            };
+            const shuffle = (values) => {
+              for (let i = values.length - 1; i > 0; i--) {
+                const j = Math.floor(random() * (i + 1));
+                [values[i], values[j]] = [values[j], values[i]];
+              }
+              return values;
+            };
+            const total = 45 + Math.floor(random() * 21);
+            const slotCount = 8 + Math.floor(random() * 9);
+            const selectedHours = shuffle(Array.from({length: 24}, (_, hour) => hour)).slice(0, slotCount).sort((a, b) => a - b);
+            const counts = Array(24).fill(0);
+            for (const hour of selectedHours) counts[hour] = 1;
+            for (let i = selectedHours.length; i < total; i++) {
+              counts[selectedHours[Math.floor(random() * selectedHours.length)]]++;
+            }
+            const jobs = [];
+            for (const hour of selectedHours) {
+              for (let index = 0; index < counts[hour]; index++) {
+                const serial = jobs.length;
+                jobs.push({
+                  id: `${date.replaceAll('-', '')}-h${String(hour).padStart(2, '0')}-${String(index).padStart(2, '0')}`,
+                  variant: variants[(serial + Math.floor(random() * variants.length)) % variants.length],
+                  slot: `${String(hour).padStart(2, '0')}:07Z`,
+                  hour,
+                  plannedDate: date,
+                  plannedTotal: total,
+                });
+              }
+            }
+            return {date, total, selectedHours, jobs};
           }
-          const allJobs = [];
-          for (const hour of selectedHours) {
-            for (let index = 0; index < counts[hour]; index++) {
-              const serial = allJobs.length;
-              allJobs.push({
-                id: `${date.replaceAll('-', '')}-h${String(hour).padStart(2, '0')}-${String(index).padStart(2, '0')}`,
-                variant: variants[(serial + Math.floor(random() * variants.length)) % variants.length],
-                slot: `${String(hour).padStart(2, '0')}:07Z`,
-                plannedDate: date,
-                plannedTotal: total,
-              });
+
+          const isoDate = (d) => d.toISOString().slice(0, 10);
+          const today = planFor(isoDate(now));
+          const tomorrowDate = new Date(now.getTime() + 86400000);
+          const tomorrow = planFor(isoDate(tomorrowDate));
+
+          let plan;
+          if (forceCount) {
+            const jobs = today.jobs.slice(0, forceCount).map((job, i) => ({...job, id: `force-${job.id}-${i}`}));
+            plan = {
+              mode: 'force', date: today.date, plannedTotal: today.total, selectedHours: today.selectedHours,
+              waitSeconds: 0, targetSlot: 'now', currentSlotCount: jobs.length, matrix: {include: jobs},
+            };
+          } else {
+            const candidates = [];
+            for (const p of [today, tomorrow]) {
+              for (const hour of p.selectedHours) {
+                const at = new Date(`${p.date}T${String(hour).padStart(2, '0')}:07:00Z`);
+                candidates.push({plan: p, hour, at});
+              }
+            }
+            // A chained link must move strictly past the slot its predecessor handled.
+            // A cron/manual start may still pick up a slot that began within the grace window.
+            const target = afterSlot && !Number.isNaN(afterSlot.getTime())
+              ? candidates.find(c => c.at.getTime() > afterSlot.getTime() && c.at.getTime() >= now.getTime() - graceSeconds * 1000)
+              : candidates.find(c => c.at.getTime() >= now.getTime() - graceSeconds * 1000);
+            const untilTarget = Math.max(0, Math.round((target.at.getTime() - now.getTime()) / 1000));
+            if (untilTarget > maxWaitSeconds) {
+              plan = {
+                mode: 'hop', date: today.date, plannedTotal: today.total, selectedHours: today.selectedHours,
+                waitSeconds: maxWaitSeconds, targetSlot: `${target.plan.date}T${String(target.hour).padStart(2, '0')}:07Z (too far, hopping)`,
+                completedSlot: process.env.AFTER_SLOT || '',
+                currentSlotCount: 0, matrix: {include: []},
+              };
+            } else {
+              const jobs = target.plan.jobs.filter(job => job.hour === target.hour);
+              plan = {
+                mode: 'slot', date: target.plan.date, plannedTotal: target.plan.total, selectedHours: target.plan.selectedHours,
+                waitSeconds: untilTarget, targetSlot: `${target.plan.date}T${String(target.hour).padStart(2, '0')}:07Z`,
+                completedSlot: `${target.plan.date}T${String(target.hour).padStart(2, '0')}:07:00Z`,
+                currentSlotCount: jobs.length, matrix: {include: jobs},
+              };
             }
           }
-          const jobs = forceCount ? allJobs : allJobs.filter(job => Number(job.slot.slice(0, 2)) === currentHour);
-          const plan = {
-            date,
-            currentHour,
-            plannedTotal: total,
-            selectedHours,
-            currentSlotCount: jobs.length,
-            matrix: {include: jobs},
-          };
+          if (plan.completedSlot === undefined) plan.completedSlot = process.env.AFTER_SLOT || '';
           fs.writeFileSync('plan.json', JSON.stringify(plan, null, 2));
           console.log(JSON.stringify(plan, null, 2));
           NODE
-          matrix="$(node -e "process.stdout.write(JSON.stringify(require('./plan.json').matrix))")"
-          count="$(node -e "process.stdout.write(String(require('./plan.json').currentSlotCount))")"
-          total="$(node -e "process.stdout.write(String(require('./plan.json').plannedTotal))")"
-          date="$(node -e "process.stdout.write(require('./plan.json').date)")"
-          hours="$(node -e "process.stdout.write(require('./plan.json').selectedHours.join(','))")"
+          field() { node -e "const p=require('./plan.json'); const v=p.$1; process.stdout.write(typeof v==='object'?JSON.stringify(v):String(v))"; }
+          wait_seconds="$(field waitSeconds)"
+          count="$(field currentSlotCount)"
+          chain="$([[ "$CHAIN_INPUT" == "false" ]] && echo false || echo true)"
+          echo "Plan mode: $(field mode) | target slot: $(field targetSlot) | jobs at target: $count | wait: ${wait_seconds}s | chain next: $chain"
+          if [[ "$wait_seconds" -gt 0 ]]; then
+            echo "Sleeping until the planned slot ($(date -u -d "@$(( $(date -u +%s) + wait_seconds ))" +%Y-%m-%dT%H:%M:%SZ))."
+            sleep "$wait_seconds"
+            echo "Woke at $(date -u +%Y-%m-%dT%H:%M:%SZ)."
+          fi
           echo "should_run=$([[ "$count" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "planned_total=$total" >> "$GITHUB_OUTPUT"
-          echo "planned_date=$date" >> "$GITHUB_OUTPUT"
-          echo "planned_hours=$hours" >> "$GITHUB_OUTPUT"
+          echo "chain=$chain" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(field matrix)" >> "$GITHUB_OUTPUT"
+          echo "planned_total=$(field plannedTotal)" >> "$GITHUB_OUTPUT"
+          echo "planned_date=$(field date)" >> "$GITHUB_OUTPUT"
+          echo "planned_hours=$(node -e "process.stdout.write(require('./plan.json').selectedHours.join(','))")" >> "$GITHUB_OUTPUT"
+          echo "target_slot=$(field targetSlot)" >> "$GITHUB_OUTPUT"
+          echo "completed_slot=$(field completedSlot)" >> "$GITHUB_OUTPUT"
           {
-            echo "## Daily Promptr QA plan"
-            echo "- UTC date: $date"
-            echo "- Target jobs today: $total"
-            echo "- Active UTC hours: $hours"
-            echo "- Jobs in this hour: $count"
+            echo "## Promptr QA chain link"
+            echo "- Trigger: ${{ github.event_name }} (mode: $(field mode))"
+            echo "- Plan date (UTC): $(field date), target $(field plannedTotal) tests across hours $(node -e "process.stdout.write(require('./plan.json').selectedHours.join(','))")"
+            echo "- This link's slot: $(field targetSlot), tests in this slot: $count"
+            echo "- Dispatches next link when done: $chain"
             echo "- Each test job downloads the latest Open VSX VSIX directly on its own fresh VM."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -188,3 +264,33 @@ jobs:
           done
           echo "Wiped test state, VS Code download, fresh VSIX, npm dependencies, and evidence from $RUNNER_NAME."
           echo 'This standard GitHub-hosted VM is decommissioned automatically after the job.'
+
+  chain:
+    name: Dispatch the next chain link
+    needs: [plan, test]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.chain == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch next link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AFTER_SLOT: ${{ needs.plan.outputs.completed_slot }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if gh workflow run daily-health-qa.yml --ref "${GITHUB_REF_NAME}" -f force_count=0 -f chain=true -f after_slot="${AFTER_SLOT}"; then
+              echo "Dispatched the next chain link (attempt $attempt) at $(date -u +%Y-%m-%dT%H:%M:%SZ)."
+              echo "- Next link dispatched at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Dispatch attempt $attempt failed; retrying in 30s."
+            sleep 30
+          done
+          echo "Could not dispatch the next link. The hourly cron watchdog will restart the chain."
+          exit 1
