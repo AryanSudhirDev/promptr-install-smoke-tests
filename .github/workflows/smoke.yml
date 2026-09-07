@@ -1,0 +1,75 @@
+name: Three clean Promptr installations
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: promptr-smoke-tests
+  cancel-in-progress: false
+jobs:
+  package:
+    name: Download published VSIX once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Download one published package
+        shell: bash
+        run: |
+          mkdir -p input
+          curl --fail --location --max-time 120 'https://open-vsx.org/api/aryansudhir/promptr/1.5.6/file/aryansudhir.promptr-1.5.6.vsix' -o input/promptr.vsix
+          unzip -t input/promptr.vsix
+          sha256sum input/promptr.vsix | tee input/sha256.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: published-vsix
+          path: input/
+          retention-days: 1
+  test:
+    name: Clean VM test ${{ matrix.run }}
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        run: [1, 2, 3]
+    env:
+      TEST_RUN: ${{ matrix.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: published-vsix
+          path: input
+      - name: Install desktop test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb scrot libgtk-3-0 libnss3 libasound2t64 libgbm1 libxss1
+          npm ci --ignore-scripts
+      - name: Install VS Code, install Promptr, run smoke tests
+        run: xvfb-run -a --server-args='-screen 0 1280x900x24' npm test
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: results-${{ matrix.run }}
+          path: results/
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Remove test installation and state
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/state" "$GITHUB_WORKSPACE/.vscode-test" "$GITHUB_WORKSPACE/input"
+          test ! -e "$GITHUB_WORKSPACE/state"
+          test ! -e "$GITHUB_WORKSPACE/.vscode-test"
+          test ! -e "$GITHUB_WORKSPACE/input"
+          echo 'Test installation and state removed. GitHub will decommission this hosted VM when the job ends.'
