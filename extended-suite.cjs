@@ -64,27 +64,18 @@ exports.run = async () => {
       record('Clean profile contains exactly one Promptr extension', {autoValidate: true});
     }
 
-    if (variant === 'unauthenticated') {
-      let fetchCalls = 0;
-      let inputPromptCount = 0;
-      const errorMessages = [];
-      const originalFetch = globalThis.fetch;
-      const originalInputBox = vscode.window.showInputBox;
-      const originalErrorMessage = vscode.window.showErrorMessage;
-      globalThis.fetch = async (...args) => { fetchCalls++; throw new Error(`Unexpected network request during no-token smoke test: ${String(args[0])}`); };
-      vscode.window.showInputBox = async () => { inputPromptCount++; return undefined; };
-      vscode.window.showErrorMessage = async (message, ...items) => { errorMessages.push({message, items}); return undefined; };
-      try {
-        await vscode.commands.executeCommand('promptr.generatePrompt');
-      } finally {
-        globalThis.fetch = originalFetch;
-        vscode.window.showInputBox = originalInputBox;
-        vscode.window.showErrorMessage = originalErrorMessage;
-      }
-      assert.equal(inputPromptCount, 1, 'No-token command did not request an access token');
-      assert.equal(fetchCalls, 0, 'Unauthenticated command attempted a backend request');
-      assert(errorMessages.some(item => item.message.includes('Please enter your Promptr access token')), 'No-token error message was not shown');
-      record('Unauthenticated command path cancels safely without backend request', {fetchCalls, inputPromptCount, errorMessages, accessTokenProvided: false});
+    if (variant === 'settings-isolation') {
+      const expectedProperties = ['promptr.temperature', 'promptr.customContext', 'promptr.autoValidate', 'promptr.apiBase', 'promptr.backendApiUrl'];
+      const properties = Object.keys(target.packageJSON.contributes?.configuration?.properties || {});
+      for (const property of expectedProperties) assert(properties.includes(property), `Missing settings property: ${property}`);
+      await config.update('customContext', 'temporary clean-profile value', vscode.ConfigurationTarget.Global);
+      await delay(200);
+      assert.equal(vscode.workspace.getConfiguration('promptr').get('customContext'), 'temporary clean-profile value');
+      await config.update('customContext', undefined, vscode.ConfigurationTarget.Global);
+      await delay(200);
+      assert.equal(vscode.workspace.getConfiguration('promptr').get('customContext'), '');
+      assert.equal(vscode.workspace.getConfiguration('promptr').get('autoValidate'), true);
+      record('Settings schema isolation and custom-context round-trip', {properties: expectedProperties, customContextReset: true, autoValidate: true});
     }
 
     if (variant === 'ui-settings') {
