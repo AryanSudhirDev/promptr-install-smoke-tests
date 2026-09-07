@@ -1,1 +1,7 @@
+{"at":"2026-09-07T05:20:00Z","downloadCount":6926,"version":"1.5.6","note":"observed during setup"}
+{"at":"2026-09-07T15:00:00Z","downloadCount":7044,"version":"1.5.6","note":"user-reported morning reading, time approximate","approx":true}
+{"at":"2026-09-07T17:41:00Z","downloadCount":7088,"version":"1.5.6","note":"observed"}
+{"at":"2026-09-07T21:44:00Z","downloadCount":7215,"version":"1.5.6","note":"observed"}
+{"at":"2026-09-07T21:58:49.672Z","downloadCount":7215,"version":"1.5.6","imacToday":54}
+{"at":"2026-09-07T22:02:00.548Z","downloadCount":7215,"version":"1.5.6","imacToday":54}
 {"at":"2026-09-07T22:10:01.166Z","downloadCount":7215,"version":"1.5.6","source":"github-actions"}
