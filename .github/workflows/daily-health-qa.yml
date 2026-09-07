@@ -69,6 +69,7 @@ jobs:
         if: steps.registry.outputs.registry_ok == 'true'
         env:
           FORCE_COUNT: ${{ inputs.force_count || '0' }}
+          DAILY_TOTAL: ${{ vars.MONITOR_CHECKS_PER_DAY || '' }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           THIS_RUN_ID: ${{ github.run_id }}
@@ -109,12 +110,14 @@ jobs:
               }
               return values;
             };
-            // 70-90 checks spread across all 48 half-hour slots (:07 and :37), 1-3 per slot, so the
-            // monitor runs as a steady trickle all day instead of hourly bursts.
-            const total = 70 + Math.floor(random() * 21);
+            // Checks spread across all 48 half-hour slots (:07 and :37) so the monitor runs as a steady
+            // trickle. Daily total comes from repo variable MONITOR_CHECKS_PER_DAY (the dashboard writes it);
+            // with no variable set it falls back to a seeded 70-90.
+            const configured = Math.max(0, Math.min(1000, Number(process.env.DAILY_TOTAL || 0)));
+            const total = configured || (70 + Math.floor(random() * 21));
             const slots = Array.from({length: 48}, (_, i) => i); // 0 = 00:07, 1 = 00:37, ...
-            const counts = Array(48).fill(1);
-            for (let i = 48; i < total; i++) counts[Math.floor(random() * 48)]++;
+            const counts = Array(48).fill(total >= 48 ? 1 : 0);
+            for (let i = counts.reduce((a, b) => a + b, 0); i < total; i++) counts[Math.floor(random() * 48)]++;
             const jobs = [];
             for (const slot of slots) {
               const hh = String(Math.floor(slot / 2)).padStart(2, '0');
