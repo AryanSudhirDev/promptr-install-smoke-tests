@@ -1,0 +1,190 @@
+name: Daily Promptr health QA (45-65 fresh downloads)
+
+on:
+  # The planner runs once per hour. A seeded daily plan chooses 8-16 changing UTC hours
+  # and distributes exactly 45-65 clean-install jobs across those hours.
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_count:
+        description: 'Optional small validation run now; scheduled runs ignore this'
+        required: false
+        default: '0'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promptr-daily-health-qa
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan today\'s changing QA slots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      should_run: ${{ steps.plan.outputs.should_run }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      planned_total: ${{ steps.plan.outputs.planned_total }}
+      planned_date: ${{ steps.plan.outputs.planned_date }}
+      planned_hours: ${{ steps.plan.outputs.planned_hours }}
+    steps:
+      - id: plan
+        env:
+          FORCE_COUNT: ${{ inputs.force_count || '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node > plan.json <<'NODE'
+          const fs = require('node:fs');
+          const now = new Date();
+          const date = now.toISOString().slice(0, 10);
+          const currentHour = now.getUTCHours();
+          const forceCount = Math.max(0, Math.min(65, Number(process.env.FORCE_COUNT || 0)));
+          let seed = 2166136261;
+          for (const byte of Buffer.from(date)) {
+            seed ^= byte;
+            seed = Math.imul(seed, 16777619) >>> 0;
+          }
+          const random = () => {
+            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+            return seed / 4294967296;
+          };
+          const shuffle = (values) => {
+            for (let i = values.length - 1; i > 0; i--) {
+              const j = Math.floor(random() * (i + 1));
+              [values[i], values[j]] = [values[j], values[i]];
+            }
+            return values;
+          };
+          const variants = ['manifest', 'clean-state', 'settings-isolation', 'ui-settings', 'reinstall', 'duplicate-install'];
+          const total = forceCount || 45 + Math.floor(random() * 21);
+          const slotCount = forceCount ? 1 : 8 + Math.floor(random() * 9);
+          const selectedHours = shuffle(Array.from({length: 24}, (_, hour) => hour)).slice(0, slotCount).sort((a, b) => a - b);
+          const counts = Array(24).fill(0);
+          for (const hour of selectedHours) counts[hour] = 1;
+          for (let i = selectedHours.length; i < total; i++) {
+            counts[selectedHours[Math.floor(random() * selectedHours.length)]]++;
+          }
+          const allJobs = [];
+          for (const hour of selectedHours) {
+            for (let index = 0; index < counts[hour]; index++) {
+              const serial = allJobs.length;
+              allJobs.push({
+                id: `${date.replaceAll('-', '')}-h${String(hour).padStart(2, '0')}-${String(index).padStart(2, '0')}`,
+                variant: variants[(serial + Math.floor(random() * variants.length)) % variants.length],
+                slot: `${String(hour).padStart(2, '0')}:07Z`,
+                plannedDate: date,
+                plannedTotal: total,
+              });
+            }
+          }
+          const jobs = forceCount ? allJobs : allJobs.filter(job => Number(job.slot.slice(0, 2)) === currentHour);
+          const plan = {
+            date,
+            currentHour,
+            plannedTotal: total,
+            selectedHours,
+            currentSlotCount: jobs.length,
+            matrix: {include: jobs},
+          };
+          fs.writeFileSync('plan.json', JSON.stringify(plan, null, 2));
+          console.log(JSON.stringify(plan, null, 2));
+          NODE
+          matrix="$(node -e "process.stdout.write(JSON.stringify(require('./plan.json').matrix))")"
+          count="$(node -e "process.stdout.write(String(require('./plan.json').currentSlotCount))")"
+          total="$(node -e "process.stdout.write(String(require('./plan.json').plannedTotal))")"
+          date="$(node -e "process.stdout.write(require('./plan.json').date)")"
+          hours="$(node -e "process.stdout.write(require('./plan.json').selectedHours.join(','))")"
+          echo "should_run=$([[ "$count" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "planned_total=$total" >> "$GITHUB_OUTPUT"
+          echo "planned_date=$date" >> "$GITHUB_OUTPUT"
+          echo "planned_hours=$hours" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Daily Promptr QA plan"
+            echo "- UTC date: $date"
+            echo "- Target jobs today: $total"
+            echo "- Active UTC hours: $hours"
+            echo "- Jobs in this hour: $count"
+            echo "- Each test job downloads the latest Open VSX VSIX directly on its own fresh VM."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    needs: plan
+    if: needs.plan.outputs.should_run == 'true'
+    name: Fresh VM QA ${{ matrix.id }} (${{ matrix.variant }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      TEST_VARIANT: ${{ matrix.variant }}
+      TEST_RUN: ${{ matrix.id }}
+      DAILY_PLAN_DATE: ${{ matrix.plannedDate }}
+      DAILY_PLANNED_TOTAL: ${{ matrix.plannedTotal }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Download latest Promptr freshly on this VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          registry='https://open-vsx.org/api/aryansudhir/promptr'
+          curl --fail --location --retry 3 --retry-all-errors --no-keepalive \
+            -H 'Cache-Control: no-cache' "$registry" -o input/registry.json
+          version="$(node -e "process.stdout.write(require('./input/registry.json').version)")"
+          url="$(node -e "process.stdout.write(require('./input/registry.json').files.download)")"
+          sha_url="$(node -e "process.stdout.write(require('./input/registry.json').files.sha256)")"
+          expected_sha="$(curl --fail --location --retry 3 --retry-all-errors --no-keepalive -H 'Cache-Control: no-cache' "$sha_url" | tr -d '[:space:]')"
+          date -u +%Y-%m-%dT%H:%M:%SZ | tee input/download-start.txt
+          curl --fail --location --retry 3 --retry-all-errors --no-keepalive \
+            -H 'Cache-Control: no-cache' "$url" -o input/promptr.vsix
+          date -u +%Y-%m-%dT%H:%M:%SZ | tee input/download-finished.txt
+          actual_sha="$(sha256sum input/promptr.vsix | awk '{print $1}')"
+          test -s input/promptr.vsix
+          test "$actual_sha" = "$expected_sha"
+          echo "PROMPTR_VSIX_URL=$url" >> "$GITHUB_ENV"
+          echo "EXPECTED_VSIX_VERSION=$version" >> "$GITHUB_ENV"
+          echo "EXPECTED_VSIX_SHA256=$expected_sha" >> "$GITHUB_ENV"
+          printf 'runner=%s\nrunner_os=%s\nrunner_arch=%s\nworkflow_run=%s\njob=%s\nvariant=%s\nversion=%s\nbytes=%s\nsha256=%s\n' \
+            "$RUNNER_NAME" "$RUNNER_OS" "$RUNNER_ARCH" "$GITHUB_RUN_ID" "$GITHUB_JOB" "$TEST_VARIANT" "$version" \
+            "$(stat -c '%s' input/promptr.vsix)" "$actual_sha" | tee input/download-metadata.txt
+          unzip -t input/promptr.vsix
+      - name: Install desktop test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb scrot libgtk-3-0 libnss3 libasound2t64 libgbm1 libxss1
+          npm ci --ignore-scripts
+      - name: Install VS Code and run the fresh-download variant
+        run: xvfb-run -a --server-args='-screen 0 1280x900x24' node extended-run-test.cjs
+      - name: Save per-VM evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: daily-${{ github.run_id }}-${{ matrix.id }}
+          path: results/
+          if-no-files-found: warn
+          retention-days: 2
+      - name: Wipe this VM test session
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- "$GITHUB_WORKSPACE/state" "$GITHUB_WORKSPACE/.vscode-test" \
+            "$GITHUB_WORKSPACE/input" "$GITHUB_WORKSPACE/node_modules" "$GITHUB_WORKSPACE/results"
+          for path in state .vscode-test input node_modules results; do
+            test ! -e "$GITHUB_WORKSPACE/$path"
+          done
+          echo "Wiped test state, VS Code download, fresh VSIX, npm dependencies, and evidence from $RUNNER_NAME."
+          echo 'This standard GitHub-hosted VM is decommissioned automatically after the job.'

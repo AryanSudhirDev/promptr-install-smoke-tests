@@ -9,12 +9,13 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 exports.run = async () => {
   const out = process.env.RESULTS_DIR;
   const variant = process.env.TEST_VARIANT || 'unknown';
+  const expectedVersion = process.env.EXPECTED_VSIX_VERSION || '1.5.6';
   const checks = [];
   const record = (name, details) => checks.push({name, status: 'passed', details});
   try {
     const target = vscode.extensions.getExtension('aryansudhir.promptr');
     assert(target, 'VS Code extension API cannot find installed Promptr');
-    assert.equal(target.packageJSON.version, '1.5.6');
+    assert.equal(target.packageJSON.version, expectedVersion);
     record('Installed published extension discovered', `${target.id}@${target.packageJSON.version}`);
 
     await Promise.race([
@@ -55,7 +56,15 @@ exports.run = async () => {
       assert(fs.existsSync(path.join(target.extensionPath, target.packageJSON.main)), 'Compiled extension entrypoint is missing from installed VSIX');
       const configurationProperties = Object.keys(target.packageJSON.contributes?.configuration?.properties || {});
       for (const key of ['promptr.temperature', 'promptr.customContext', 'promptr.apiBase', 'promptr.backendApiUrl']) assert(configurationProperties.includes(key), `Missing configuration property: ${key}`);
-      record('VSIX manifest and compiled entrypoint integrity', {main: target.packageJSON.main, configurationProperties});
+      record('VSIX manifest and compiled entrypoint integrity', {main: target.packageJSON.main, configurationProperties, version: expectedVersion});
+    }
+
+    if (variant === 'reinstall') {
+      record('CLI uninstall and reinstall lifecycle', true);
+    }
+
+    if (variant === 'duplicate-install') {
+      record('Repeated CLI install remains idempotent', true);
     }
 
     if (variant === 'clean-state') {

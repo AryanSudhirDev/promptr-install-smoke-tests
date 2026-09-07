@@ -20,6 +20,7 @@ function runChecked(command, args, options = {}) {
   const extensionsDir = path.join(stateDir, 'extensions');
   const vsix = path.join(root, 'input', 'promptr.vsix');
   const variant = process.env.TEST_VARIANT || 'unknown';
+  const expectedVersion = process.env.EXPECTED_VSIX_VERSION || '1.5.6';
   const expectedHash = process.env.EXPECTED_VSIX_SHA256;
   fs.mkdirSync(resultDir, {recursive: true});
 
@@ -31,7 +32,7 @@ function runChecked(command, args, options = {}) {
   assert(fs.existsSync(vsix), 'Fresh VSIX download is missing');
 
   const download = {
-    url: 'https://open-vsx.org/api/aryansudhir/promptr/1.5.6/file/aryansudhir.promptr-1.5.6.vsix',
+    url: process.env.PROMPTR_VSIX_URL || 'https://open-vsx.org/api/aryansudhir/promptr/1.5.6/file/aryansudhir.promptr-1.5.6.vsix',
     downloadedAt: new Date().toISOString(),
     runnerName: process.env.RUNNER_NAME,
     runnerOs: process.env.RUNNER_OS,
@@ -47,9 +48,9 @@ function runChecked(command, args, options = {}) {
   runChecked('unzip', ['-t', vsix]);
   const manifest = JSON.parse(runChecked('unzip', ['-p', vsix, 'extension/package.json']));
   assert.equal(manifest.publisher + '.' + manifest.name, 'aryansudhir.promptr');
-  assert.equal(manifest.version, '1.5.6');
+  assert.equal(manifest.version, expectedVersion);
   assert.equal(manifest.main, './dist/extension.js');
-  assert.equal(manifest.engines?.vscode, '^1.86.0');
+  assert(manifest.engines?.vscode, 'VSIX is missing a VS Code engine requirement');
   assert.equal(manifest.activationEvents?.[0], 'onStartupFinished');
   assert(fs.existsSync(path.join(root, 'input', 'promptr.vsix')), 'VSIX vanished before installation');
   fs.writeFileSync(path.join(resultDir, 'download.json'), JSON.stringify({...download, manifest}, null, 2));
@@ -72,9 +73,26 @@ function runChecked(command, args, options = {}) {
   assert.equal(before, '', `Fresh extension directory was not empty: ${before}`);
   const installOutput = command(['--install-extension', vsix]);
   const installed = command(['--list-extensions', '--show-versions']);
-  assert(installed.toLowerCase().split(/\r?\n/).includes('aryansudhir.promptr@1.5.6'), `Published extension was not installed: ${installed}`);
+  assert(installed.toLowerCase().split(/\r?\n/).includes(`aryansudhir.promptr@${expectedVersion}`.toLowerCase()), `Published extension was not installed: ${installed}`);
+  const lifecycle = [];
+  if (variant === 'reinstall') {
+    command(['--uninstall-extension', 'aryansudhir.promptr']);
+    const afterUninstall = command(['--list-extensions', '--show-versions']);
+    assert(!afterUninstall.toLowerCase().split(/\r?\n/).includes(`aryansudhir.promptr@${expectedVersion}`.toLowerCase()), `Extension remained installed after uninstall: ${afterUninstall}`);
+    command(['--install-extension', vsix]);
+    const afterReinstall = command(['--list-extensions', '--show-versions']);
+    assert(afterReinstall.toLowerCase().split(/\r?\n/).includes(`aryansudhir.promptr@${expectedVersion}`.toLowerCase()), `Extension did not return after reinstall: ${afterReinstall}`);
+    lifecycle.push({uninstalled:true, reinstalled:true});
+  }
+  if (variant === 'duplicate-install') {
+    command(['--install-extension', vsix]);
+    const afterDuplicateInstall = command(['--list-extensions', '--show-versions']);
+    const matches = afterDuplicateInstall.toLowerCase().split(/\r?\n/).filter(line => line === `aryansudhir.promptr@${expectedVersion}`.toLowerCase());
+    assert.equal(matches.length, 1, `Repeated install created an unexpected extension listing: ${afterDuplicateInstall}`);
+    lifecycle.push({secondInstall:true, uniqueListings:matches.length});
+  }
   const vscodeVersion = command(['--version']);
-  const installation = {variant, runnerName: process.env.RUNNER_NAME, freshStateBeforeInstall: true, freshVSIXDownload: true, downloadSha256: download.sha256, installed, vscodeVersion, installOutput};
+  const installation = {variant, expectedVersion, runnerName: process.env.RUNNER_NAME, freshStateBeforeInstall: true, freshVSIXDownload: true, downloadSha256: download.sha256, installed, vscodeVersion, installOutput, lifecycle};
   fs.writeFileSync(path.join(resultDir, 'installation.json'), JSON.stringify(installation, null, 2));
   console.log(JSON.stringify({download, installation}, null, 2));
 
@@ -83,7 +101,7 @@ function runChecked(command, args, options = {}) {
       vscodeExecutablePath: executable,
       extensionDevelopmentPath: path.join(root, 'helper'),
       extensionTestsPath: path.join(root, 'extended-suite.cjs'),
-      extensionTestsEnv: {RESULTS_DIR: resultDir, TEST_VARIANT: variant, TEST_RUN: process.env.TEST_RUN || variant},
+      extensionTestsEnv: {RESULTS_DIR: resultDir, TEST_VARIANT: variant, TEST_RUN: process.env.TEST_RUN || variant, EXPECTED_VSIX_VERSION: expectedVersion},
       launchArgs: ['--user-data-dir', userDir, '--extensions-dir', extensionsDir, '--disable-telemetry', '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', '--disable-gpu'],
     });
   } finally {
