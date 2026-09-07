@@ -1,4 +1,4 @@
-name: Four fresh Promptr downloads and install variants
+name: Promptr clean-install variants (manual)
 on:
   push:
     branches: [main]
@@ -13,7 +13,7 @@ env:
   EXPECTED_VSIX_SHA256: a425bcf89666536d8b4946bf4fec7fc74878f3f27834fab7f4c5781b86272e97
 jobs:
   test:
-    name: Fresh VM + fresh VSIX download (${{ matrix.variant }})
+    name: Clean install on a fresh VM (${{ matrix.variant }})
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     strategy:
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Download Promptr freshly on this VM
+      - name: Fetch the published Promptr release
         shell: bash
         run: |
           set -euo pipefail
@@ -53,9 +53,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y xvfb scrot libgtk-3-0 libnss3 libasound2t64 libgbm1 libxss1
           npm ci --ignore-scripts
-      - name: Install VS Code and freshly downloaded Promptr, run variant
+      - name: Install VS Code and run the clean-install variant
         run: xvfb-run -a --server-args='-screen 0 1280x900x24' node extended-run-test.cjs
-      - name: Save per-VM evidence
+      - name: Save check report and screenshot
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -63,7 +63,7 @@ jobs:
           path: results/
           if-no-files-found: warn
           retention-days: 3
-      - name: Wipe this VM test session
+      - name: Clean up the test machine
         if: always()
         shell: bash
         run: |

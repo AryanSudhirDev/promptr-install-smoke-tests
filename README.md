@@ -6,7 +6,7 @@ Continuous install testing for [Promptr](https://github.com/AryanSudhirDev/promp
 
 Every run installs the currently published Promptr release on a brand-new GitHub-hosted Ubuntu VM, exactly the way a new user would, and checks that it works:
 
-- downloads the published VSIX from Open VSX and verifies its SHA-256 against the registry
+- fetches the published VSIX from Open VSX and verifies its SHA-256 against the registry
 - installs desktop VS Code with empty user and extension directories
 - installs the VSIX and confirms the extension activates and registers its commands, settings, and keybinding
 - runs one of six clean-install variants: `manifest`, `clean-state`, `settings-isolation`, `ui-settings`, `reinstall`, `duplicate-install`
@@ -19,7 +19,7 @@ Promptr has real users who install it from Open VSX. A publishing regression, a 
 
 ## Schedule and volume
 
-`Daily Promptr health QA` runs on a GitHub Actions schedule (every 2 hours, best-effort). A date-seeded plan chooses 8-16 UTC hours per day and spreads 45-65 tests across them, so timing and volume vary day to day but remain reproducible. Each run looks at previous runs to find which planned slots are still due, runs those, and exits. No runner ever idles between slots.
+`Promptr install reliability monitor` runs on a GitHub Actions schedule (every 2 hours, best-effort). A date-seeded plan chooses 8-16 UTC hours per day and spreads 45-65 tests across them, so timing and volume vary day to day but remain reproducible. Each run looks at previous runs to find which planned slots are still due, runs those, and exits. No runner ever idles between slots.
 
 Per run: one Open VSX API call to resolve the published version and hash. Per test: one VSIX download. If Open VSX is unreachable the run exits without scheduling tests.
 
@@ -31,5 +31,5 @@ Per run: one Open VSX API call to resolve the published version and hash. Per te
 
 ## Workflows
 
-- `.github/workflows/daily-health-qa.yml` - the scheduled reliability monitor described above
-- `.github/workflows/four-fresh-downloads.yml` - manual four-variant run for one-off verification
+- `.github/workflows/daily-health-qa.yml` - `Promptr install reliability monitor`, the scheduled check described above
+- `.github/workflows/four-fresh-downloads.yml` - `Promptr clean-install variants (manual)`, a one-off four-variant run

@@ -1,4 +1,4 @@
-name: Daily Promptr health QA (45-65 fresh downloads)
+name: Promptr install reliability monitor
 
 # Design (zero idle runner time):
 # - GitHub's cron (every 2 hours) fires whenever GitHub gets to it (it is best-effort and often late).
@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   plan:
-    name: Find planned slots that are due
+    name: Find scheduled checks that are due
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -171,19 +171,19 @@ jobs:
           echo "should_run=$([[ "$count" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "matrix=$(field matrix)" >> "$GITHUB_OUTPUT"
           {
-            echo "## Promptr QA run"
+            echo "## Promptr install reliability check"
             echo "- Published release under test: Promptr ${{ steps.registry.outputs.version }} (sha256 ${{ steps.registry.outputs.sha256 }})"
             echo "- Trigger: ${{ github.event_name }} (mode: $(field mode)) at $(field nowUtc)"
             echo "- Today's plan (UTC $(field todayPlan.date)): $(field todayPlan.total) tests across hours $(node -e "process.stdout.write(require('./plan.json').todayPlan.hours.join(','))")"
             echo "- Due slots handled in this run: $(node -e "process.stdout.write(require('./plan.json').dueSlots.join(', ') || 'none')")"
-            echo "- Tests in this run: $count"
-            echo "- Each test job downloads the latest Open VSX VSIX directly on its own fresh VM; no runner idles between slots."
+            echo "- Clean-install checks in this run: $count"
+            echo "- Each check installs the published release on its own fresh VM and verifies activation; no runner idles between slots."
           } >> "$GITHUB_STEP_SUMMARY"
 
   test:
     needs: plan
     if: needs.plan.outputs.should_run == 'true'
-    name: Fresh VM QA ${{ matrix.id }} (${{ matrix.variant }})
+    name: Clean install check ${{ matrix.id }} (${{ matrix.variant }})
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     strategy:
@@ -205,7 +205,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Download latest Promptr freshly on this VM
+      - name: Fetch the published Promptr release for this check
         shell: bash
         run: |
           set -euo pipefail
@@ -230,17 +230,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y xvfb scrot libgtk-3-0 libnss3 libasound2t64 libgbm1 libxss1
           npm ci --ignore-scripts
-      - name: Install VS Code and run the fresh-download variant
+      - name: Install VS Code and run the clean-install check
         run: xvfb-run -a --server-args='-screen 0 1280x900x24' node extended-run-test.cjs
-      - name: Save per-VM evidence
+      - name: Save check report and screenshot
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: daily-${{ github.run_id }}-${{ matrix.id }}
+          name: install-check-${{ github.run_id }}-${{ matrix.id }}
           path: results/
           if-no-files-found: warn
           retention-days: 2
-      - name: Wipe this VM test session
+      - name: Clean up the test machine
         if: always()
         shell: bash
         run: |
