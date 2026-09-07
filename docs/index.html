@@ -40,6 +40,11 @@
   summary { cursor:pointer; font-size:14px; }
   .hint { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.5; }
   code { background:var(--bg); padding:1px 5px; border-radius:4px; font-size:12px; }
+  #proj td { padding:7px 0; border-bottom:1px solid var(--line); }
+  #proj tr:last-child td { border-bottom:0; }
+  #proj .lab { color:var(--dim); }
+  #proj .val { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
+  #proj .sub2 { text-align:right; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
 </style>
 </head>
 <body>
@@ -87,6 +92,13 @@
     <div style="margin-top:14px"><div class="where" style="margin-bottom:4px">Downloads per hour</div>
       <svg id="bars" viewBox="0 0 800 110" preserveAspectRatio="none" style="width:100%;height:110px"></svg>
     </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Projection</h2>
+    <div class="where" id="proj-basis">…</div>
+    <table id="proj" style="width:100%;border-collapse:collapse;font-size:14px"></table>
+    <div class="where" id="proj-note" style="margin:10px 0 0"></div>
   </div>
 
   <details id="tokbox">
@@ -219,6 +231,40 @@ function drawHistory(pts) {
         return `<rect x="${(bp.l + i * bw + 1).toFixed(1)}" y="${(BH - bp.b - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" fill="var(--accent)" opacity="0.75"><title>${new Date(b.hour).toLocaleString()}: ${b.count}</title></rect>`; }).join('');
 }
 
+// Projected totals at fixed dates, from the observed rate and, separately, from the planned
+// monitoring rate alone, so it is obvious how much of the curve is our own testing.
+function drawProjection(pts, plannedPerDay) {
+  if (pts.length < 2) { $('proj-basis').textContent = 'not enough history yet'; return; }
+  const at = (p) => new Date(p.at).getTime();
+  const last = pts.at(-1);
+  const pickBase = (ms) => { const cutoff = Date.now() - ms; return [...pts].reverse().find((p) => at(p) <= cutoff) || pts[0]; };
+  // prefer a 7-day window, fall back to whatever exists
+  let base = pickBase(7 * 86400000);
+  if (at(last) - at(base) < 6 * 3600000) base = pts[0];
+  const days = (at(last) - at(base)) / 86400000;
+  const perDay = days > 0 ? (last.downloadCount - base.downloadCount) / days : 0;
+  const hours = Math.round(days * 24 * 10) / 10;
+
+  $('proj-basis').innerHTML = `Observed <b>${Math.round(perDay).toLocaleString()}/day</b> over the last ${hours} h` +
+    (plannedPerDay ? ` · planned monitoring <b>${plannedPerDay.toLocaleString()}/day</b>` : '') +
+    `${base.approx ? ' · window starts on an approximate reading' : ''}`;
+
+  const targets = [['Nov 1, 2026', Date.UTC(2026, 10, 1)], ['Jan 1, 2027', Date.UTC(2027, 0, 1)]];
+  $('proj').innerHTML = targets.map(([label, t]) => {
+    const d = Math.max(0, (t - Date.now()) / 86400000);
+    const observed = Math.round(last.downloadCount + perDay * d);
+    const monitoringOnly = plannedPerDay ? Math.round(last.downloadCount + plannedPerDay * d) : null;
+    return `<tr><td class="lab">${label}<br><span style="font-size:12px">in ${Math.round(d)} days</span></td>` +
+      `<td class="val">~${observed.toLocaleString()}` +
+      (monitoringOnly ? `<div class="sub2">~${monitoringOnly.toLocaleString()} if only monitoring ran</div>` : '') +
+      `</td></tr>`;
+  }).join('');
+
+  const monitoringShare = plannedPerDay && perDay > 0 ? Math.min(100, Math.round((plannedPerDay / perDay) * 100)) : null;
+  $('proj-note').textContent = `Straight-line estimate from ${pts.length} readings; it will sharpen as history builds.` +
+    (monitoringShare != null ? ` At the current rate, about ${monitoringShare}% of growth is your own monitoring.` : '');
+}
+
 async function load() {
   try {
     const status = await (await fetch(RAW('data', 'status.json'))).json();
@@ -242,6 +288,9 @@ async function load() {
     const pts = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
       .filter((p) => p && typeof p.downloadCount === 'number').sort((a, b) => new Date(a.at) - new Date(b.at));
     drawHistory(pts);
+    let planned = 0;
+    try { const s = await (await fetch(RAW('data', 'status.json'))).json(); planned = (s.github?.dailyTotal || 0) + (s.imac?.dailyTotal || 0); } catch {}
+    drawProjection(pts, planned);
   } catch {}
 }
 
