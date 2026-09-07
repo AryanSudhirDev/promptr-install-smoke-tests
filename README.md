@@ -1,11 +1,35 @@
-# Promptr clean-install smoke tests
+# Promptr clean-install QA
 
-Tests the published Open VSX VSIX on three fresh standard GitHub-hosted Ubuntu VMs. One job downloads the VSIX once; all three test jobs reuse that exact artifact. Each test job downloads desktop VS Code, starts with empty user/extension directories, installs the VSIX, checks activation, command registration, settings and keybinding contributions, and captures the UI.
+Continuous install testing for [Promptr](https://github.com/AryanSudhirDev/promptr), a VS Code extension published on Open VSX as [`aryansudhir.promptr`](https://open-vsx.org/extension/aryansudhir/promptr). Both repositories are maintained by the same author.
 
-No Promptr access token, account creation, paid AI requests, or production publishing. This does not validate backend prompt refinement, Cursor-specific integration, Windows, or macOS. GitHub tears down hosted VMs after each job; local test state is additionally deleted by the workflow. Results and screenshots are retained as short-lived workflow artifacts.
+## What this repository does
 
-## Daily health QA
+Every run installs the currently published Promptr release on a brand-new GitHub-hosted Ubuntu VM, exactly the way a new user would, and checks that it works:
 
-`Daily Promptr health QA (45-65 fresh downloads)` runs from an hourly GitHub Actions schedule. A deterministic date seed selects 8-16 UTC hours that change each day and distributes 45-65 tests across them. Each selected job gets a separate standard `ubuntu-24.04` hosted VM, resolves the current Open VSX version, downloads that VSIX directly with cache bypass, verifies the registry SHA-256, installs desktop VS Code, runs one of six clean-install variants, uploads short-lived evidence, and wipes the VM workspace. The hourly planner does not download the extension; only test jobs do.
+- downloads the published VSIX from Open VSX and verifies its SHA-256 against the registry
+- installs desktop VS Code with empty user and extension directories
+- installs the VSIX and confirms the extension activates and registers its commands, settings, and keybinding
+- runs one of six clean-install variants: `manifest`, `clean-state`, `settings-isolation`, `ui-settings`, `reinstall`, `duplicate-install`
+- captures a screenshot and a JSON report as short-lived evidence (2-day retention)
+- wipes the workspace; GitHub decommissions the VM after the job
 
-The schedule is a reliability monitor, not a marketplace metric. It uses no Promptr access token and makes no paid AI requests.
+## Why it exists
+
+Promptr has real users who install it from Open VSX. A publishing regression, a broken VSIX, a VS Code update, or a registry problem would only be discovered by users unless something checks the published artifact continuously. This repository is that check. It is separate from the main Promptr repository so that the production codebase and its CI stay untouched.
+
+## Schedule and volume
+
+`Daily Promptr health QA` runs on a GitHub Actions schedule (every 2 hours, best-effort). A date-seeded plan chooses 8-16 UTC hours per day and spreads 45-65 tests across them, so timing and volume vary day to day but remain reproducible. Each run looks at previous runs to find which planned slots are still due, runs those, and exits. No runner ever idles between slots.
+
+Per run: one Open VSX API call to resolve the published version and hash. Per test: one VSIX download. If Open VSX is unreachable the run exits without scheduling tests.
+
+## What this does not do
+
+- no Promptr access token, no account creation, no paid AI requests, no production publishing
+- no validation of backend prompt refinement, Cursor-specific integration, Windows, or macOS
+- not a marketplace metric: CI downloads are counted by Open VSX like any other, so Promptr's public download count includes this testing
+
+## Workflows
+
+- `.github/workflows/daily-health-qa.yml` - the scheduled reliability monitor described above
+- `.github/workflows/four-fresh-downloads.yml` - manual four-variant run for one-off verification

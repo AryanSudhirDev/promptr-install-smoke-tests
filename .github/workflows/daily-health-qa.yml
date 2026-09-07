@@ -1,7 +1,9 @@
 name: Daily Promptr health QA (45-65 fresh downloads)
 
 # Design (zero idle runner time):
-# - GitHub's hourly cron fires whenever GitHub gets to it (it is best-effort and often late).
+# - GitHub's cron (every 2 hours) fires whenever GitHub gets to it (it is best-effort and often late).
+# - The plan job resolves the published Open VSX version/hash once per run and checks the registry
+#   is reachable; if it is not, the run exits quietly with no test jobs instead of a burst of failures.
 # - Each run looks at previous runs of this workflow to find the newest slot already attempted,
 #   then runs every planned slot that has come due since then (catch-up), and exits.
 # - No runner ever sleeps or waits. Runner usage is only the ~1 minute each test takes.
@@ -11,7 +13,7 @@ name: Daily Promptr health QA (45-65 fresh downloads)
 
 on:
   schedule:
-    - cron: '7 * * * *'
+    - cron: '7 */2 * * *'
   workflow_dispatch:
     inputs:
       force_count:
@@ -38,8 +40,33 @@ jobs:
     outputs:
       should_run: ${{ steps.plan.outputs.should_run }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      vsix_version: ${{ steps.registry.outputs.version }}
+      vsix_url: ${{ steps.registry.outputs.url }}
+      vsix_sha256: ${{ steps.registry.outputs.sha256 }}
     steps:
+      - id: registry
+        name: Resolve the published Promptr release once (and check Open VSX is reachable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry='https://open-vsx.org/api/aryansudhir/promptr'
+          if ! curl --fail --silent --show-error --location --max-time 30 "$registry" -o registry.json; then
+            echo "registry_ok=false" >> "$GITHUB_OUTPUT"
+            echo "Open VSX did not respond; skipping this run without scheduling tests." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          version="$(node -e "process.stdout.write(require('./registry.json').version)")"
+          url="$(node -e "process.stdout.write(require('./registry.json').files.download)")"
+          sha_url="$(node -e "process.stdout.write(require('./registry.json').files.sha256)")"
+          sha="$(curl --fail --silent --show-error --location --max-time 30 "$sha_url" | tr -d '[:space:]')"
+          test -n "$version" && test -n "$url" && test "${#sha}" -eq 64
+          echo "registry_ok=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "Published Promptr $version, sha256 $sha"
       - id: plan
+        if: steps.registry.outputs.registry_ok == 'true'
         env:
           FORCE_COUNT: ${{ inputs.force_count || '0' }}
           GH_TOKEN: ${{ github.token }}
@@ -145,6 +172,7 @@ jobs:
           echo "matrix=$(field matrix)" >> "$GITHUB_OUTPUT"
           {
             echo "## Promptr QA run"
+            echo "- Published release under test: Promptr ${{ steps.registry.outputs.version }} (sha256 ${{ steps.registry.outputs.sha256 }})"
             echo "- Trigger: ${{ github.event_name }} (mode: $(field mode)) at $(field nowUtc)"
             echo "- Today's plan (UTC $(field todayPlan.date)): $(field todayPlan.total) tests across hours $(node -e "process.stdout.write(require('./plan.json').todayPlan.hours.join(','))")"
             echo "- Due slots handled in this run: $(node -e "process.stdout.write(require('./plan.json').dueSlots.join(', ') || 'none')")"
@@ -167,6 +195,9 @@ jobs:
       TEST_RUN: ${{ matrix.id }}
       DAILY_PLAN_DATE: ${{ matrix.plannedDate }}
       DAILY_PLANNED_TOTAL: ${{ matrix.plannedTotal }}
+      PROMPTR_VSIX_URL: ${{ needs.plan.outputs.vsix_url }}
+      EXPECTED_VSIX_VERSION: ${{ needs.plan.outputs.vsix_version }}
+      EXPECTED_VSIX_SHA256: ${{ needs.plan.outputs.vsix_sha256 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -179,23 +210,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p input
-          registry='https://open-vsx.org/api/aryansudhir/promptr'
-          curl --fail --location --retry 3 --retry-all-errors --no-keepalive \
-            -H 'Cache-Control: no-cache' "$registry" -o input/registry.json
-          version="$(node -e "process.stdout.write(require('./input/registry.json').version)")"
-          url="$(node -e "process.stdout.write(require('./input/registry.json').files.download)")"
-          sha_url="$(node -e "process.stdout.write(require('./input/registry.json').files.sha256)")"
-          expected_sha="$(curl --fail --location --retry 3 --retry-all-errors --no-keepalive -H 'Cache-Control: no-cache' "$sha_url" | tr -d '[:space:]')"
+          version="$EXPECTED_VSIX_VERSION"
+          url="$PROMPTR_VSIX_URL"
+          expected_sha="$EXPECTED_VSIX_SHA256"
+          # One fresh download of the published VSIX per VM; version/url/sha were resolved once by the plan job.
           date -u +%Y-%m-%dT%H:%M:%SZ | tee input/download-start.txt
-          curl --fail --location --retry 3 --retry-all-errors --no-keepalive \
+          curl --fail --location --retry 2 --no-keepalive \
             -H 'Cache-Control: no-cache' "$url" -o input/promptr.vsix
           date -u +%Y-%m-%dT%H:%M:%SZ | tee input/download-finished.txt
           actual_sha="$(sha256sum input/promptr.vsix | awk '{print $1}')"
           test -s input/promptr.vsix
           test "$actual_sha" = "$expected_sha"
-          echo "PROMPTR_VSIX_URL=$url" >> "$GITHUB_ENV"
-          echo "EXPECTED_VSIX_VERSION=$version" >> "$GITHUB_ENV"
-          echo "EXPECTED_VSIX_SHA256=$expected_sha" >> "$GITHUB_ENV"
           printf 'runner=%s\nrunner_os=%s\nrunner_arch=%s\nworkflow_run=%s\njob=%s\nvariant=%s\nversion=%s\nbytes=%s\nsha256=%s\n' \
             "$RUNNER_NAME" "$RUNNER_OS" "$RUNNER_ARCH" "$GITHUB_RUN_ID" "$GITHUB_JOB" "$TEST_VARIANT" "$version" \
             "$(stat -c '%s' input/promptr.vsix)" "$actual_sha" | tee input/download-metadata.txt
