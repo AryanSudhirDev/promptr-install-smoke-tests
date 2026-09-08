@@ -314,6 +314,36 @@ function drawProjection(pts, plannedPerDay) {
     (monitoringShare != null ? ` At the current rate, about ${monitoringShare}% of growth is your own monitoring.` : '');
 }
 
+const LIVE_META_KEY = 'promptr_qa_live_meta';
+const getLiveMeta = () => { try { return JSON.parse(localStorage.getItem(LIVE_META_KEY)); } catch { return null; } };
+const setLiveMeta = (m) => localStorage.setItem(LIVE_META_KEY, JSON.stringify(m));
+
+// Shows whichever reading is newer: the last manual refresh (kept in this browser) or the
+// snapshot published to the data branch. Without this a page reload would look like it went backwards.
+function renderCount(status) {
+  const meta = getLiveMeta();
+  const published = status?.updatedAt ? new Date(status.updatedAt) : null;
+  const liveAt = meta?.at ? new Date(meta.at) : null;
+  const useLive = liveAt && (!published || liveAt > published);
+  const src = useLive ? meta : status?.openvsx;
+  if (!src) return;
+  if (src.downloadCount != null) $('dl').textContent = src.downloadCount.toLocaleString();
+  if (src.version) $('ver').textContent = 'v' + src.version;
+  const when = useLive ? liveAt : published;
+  const ageMin = when ? Math.round((Date.now() - when.getTime()) / 60000) : null;
+  const ageText = ageMin == null ? '' : ageMin < 1 ? 'just now' : ageMin < 60 ? ageMin + ' min ago' : Math.round(ageMin / 60) + ' h ago';
+  $('stamp').innerHTML = useLive
+    ? '<span class="livedot"></span>live as of ' + when.toLocaleTimeString() + ' \u00b7 ' + ageText
+    : '\u00b7 published ' + (when ? when.toLocaleTimeString() : '\u2014') + ' \u00b7 ' + ageText;
+  if (useLive && meta) {
+    const bits = [];
+    if (meta.reviewCount != null) bits.push(meta.reviewCount + ' review' + (meta.reviewCount === 1 ? '' : 's'));
+    if (meta.averageRating != null) bits.push((Math.round(meta.averageRating * 10) / 10) + '\u2605 average');
+    if (meta.publishedAt) bits.push('v' + meta.version + ' published ' + new Date(meta.publishedAt).toLocaleDateString());
+    if (bits.length) $('extra').textContent = bits.join(' \u00b7 ');
+  }
+}
+
 async function load(keepLive) {
   try {
     const status = await (await fetch(RAW('data', 'status.json'))).json();
@@ -327,13 +357,7 @@ async function load(keepLive) {
     const combined = (g.dailyTotal ?? 0) + (i.dailyTotal ?? 0);
     $('combined').textContent = combined || '—';
     $('today').textContent = g.checksToday ?? '—';
-    const newestLive = livePoints().at(-1);
-    const branchNewer = !newestLive || new Date(status.updatedAt) > new Date(newestLive.at);
-    if (!keepLive || branchNewer) {
-      $('dl').textContent = status.openvsx?.downloadCount != null ? status.openvsx.downloadCount.toLocaleString() : '—';
-      $('ver').textContent = status.openvsx?.version ? 'v' + status.openvsx.version : '';
-      $('stamp').textContent = '· updated ' + new Date(status.updatedAt).toLocaleTimeString();
-    }
+    renderCount(status);
   } catch (e) { $('gh-stats').textContent = 'could not load status.json'; }
 
   try {
@@ -373,9 +397,11 @@ async function refreshLive() {
     const j = await r.json();
     if (typeof j.downloadCount === 'number') {
       addLivePoint({ at: new Date().toISOString(), downloadCount: j.downloadCount, version: j.version, live: true });
+      setLiveMeta({ at: new Date().toISOString(), downloadCount: j.downloadCount, version: j.version,
+        reviewCount: j.reviewCount ?? null, averageRating: j.averageRating ?? null, publishedAt: j.timestamp ?? null });
       $('dl').textContent = j.downloadCount.toLocaleString();
       $('ver').textContent = 'v' + j.version;
-      $('stamp').innerHTML = '<span class="livedot"></span>live as of ' + new Date().toLocaleTimeString();
+      $('stamp').innerHTML = '<span class="livedot"></span>live as of ' + new Date().toLocaleTimeString() + ' · just now';
       const bits = [];
       if (j.reviewCount != null) bits.push(j.reviewCount + ' review' + (j.reviewCount === 1 ? '' : 's'));
       if (j.averageRating != null) bits.push((Math.round(j.averageRating * 10) / 10) + '\u2605 average');
