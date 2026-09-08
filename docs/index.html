@@ -188,12 +188,15 @@ const tok = () => localStorage.getItem('promptr_qa_token') || '';
 //    stays in Vercel's env, never in this browser.
 //  - Anywhere else (GitHub Pages, local file): call api.github.com directly with a token you paste.
 const KEY_STORE = 'promptr_qa_dash_key';
+// The write endpoint lives on the Vercel deployment. When this page is served from GitHub Pages
+// (or opened locally) it calls that same function cross-origin, so one dashboard key works everywhere.
+const API_BASE = location.hostname.endsWith('vercel.app') ? '' : 'https://promptr-qa-dashboard.vercel.app';
 const dashKey = () => localStorage.getItem(KEY_STORE) || '';
 let serverWritable = null; // null = unknown yet
 
 async function detectServer() {
   try {
-    const r = await fetch('/api/settings', { method: 'GET' });
+    const r = await fetch(API_BASE + '/api/settings', { method: 'GET' });
     if (!r.ok) { serverWritable = false; return; }
     serverWritable = Boolean((await r.json()).writable);
   } catch { serverWritable = false; }
@@ -256,7 +259,7 @@ async function save(target) {
   msg.className = 'msg'; msg.textContent = 'saving\u2026';
   try {
     if (serverWritable) {
-      const r = await fetch('/api/settings', { method: 'POST',
+      const r = await fetch(API_BASE + '/api/settings', { method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-dash-key': dashKey() },
         body: JSON.stringify({ target, total: n }) });
       const j = await r.json();

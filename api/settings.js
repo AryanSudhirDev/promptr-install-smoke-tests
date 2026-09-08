@@ -23,7 +23,24 @@ async function gh(path, init = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+const ALLOWED_ORIGINS = [
+  'https://aryansudhirdev.github.io',
+  'https://promptr-qa-dashboard.vercel.app',
+  'http://localhost:4321', 'http://localhost:4322', 'http://localhost:4323',
+];
+
 export default async function handler(req, res) {
+  // Allow the GitHub Pages copy (and the local dashboard) to use this endpoint.
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type, x-dash-key');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
   if (req.method === 'GET') {
     // lets the page discover whether this deployment can write
     return res.status(200).json({ writable: Boolean(process.env.GH_TOKEN && process.env.DASH_KEY), repo: REPO });
