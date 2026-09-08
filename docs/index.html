@@ -473,6 +473,31 @@ function drawProjection(pts, plannedPerDay) {
     (monitoringShare != null ? ` At the current rate, about ${monitoringShare}% of growth is your own monitoring.` : '');
 }
 
+// The counter only goes up, so any stored reading above the current live value is bogus
+// (stale or inconsistent edge response) and must not be shown or charted.
+function pruneImpossible(currentCount) {
+  if (typeof currentCount !== 'number') return;
+  try {
+    localStorage.setItem(LIVE_KEY, JSON.stringify(livePoints().filter((p) => p.downloadCount <= currentCount)));
+    const meta = getLiveMeta();
+    if (meta && meta.downloadCount > currentCount) localStorage.removeItem(LIVE_META_KEY);
+  } catch {}
+}
+
+// Reads the registry directly. Cheap, public and allowed from the browser, so every device shows
+// the same number instead of waiting for the hourly publish.
+async function fetchLive() {
+  const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());
+  const j = await r.json();
+  if (typeof j.downloadCount !== 'number') throw new Error('no downloadCount');
+  pruneImpossible(j.downloadCount);
+  const now = new Date().toISOString();
+  setLiveMeta({ at: now, downloadCount: j.downloadCount, version: j.version,
+    reviewCount: j.reviewCount ?? null, averageRating: j.averageRating ?? null, publishedAt: j.timestamp ?? null });
+  addLivePoint({ at: now, downloadCount: j.downloadCount, version: j.version, live: true });
+  return j;
+}
+
 const LIVE_META_KEY = 'promptr_qa_live_meta';
 const getLiveMeta = () => { try { return JSON.parse(localStorage.getItem(LIVE_META_KEY)); } catch { return null; } };
 const setLiveMeta = (m) => localStorage.setItem(LIVE_META_KEY, JSON.stringify(m));
@@ -517,6 +542,8 @@ async function load(keepLive) {
     $('combined').textContent = combined || '—';
     $('today').textContent = g.checksToday ?? '—';
     renderCount(status);
+    // Always confirm against the registry so a stored reading can never outlive reality.
+    try { await fetchLive(); renderCount(status); } catch {}
   } catch (e) { $('gh-stats').textContent = 'could not load status.json'; }
 
   try {
@@ -552,12 +579,8 @@ async function refreshLive() {
   try {
     // No custom headers: Open VSX's CORS policy does not allow a Cache-Control request header
     // (it would trigger a preflight that fails). The cb= query param defeats caching on its own.
-    const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());
-    const j = await r.json();
+    const j = await fetchLive();
     if (typeof j.downloadCount === 'number') {
-      addLivePoint({ at: new Date().toISOString(), downloadCount: j.downloadCount, version: j.version, live: true });
-      setLiveMeta({ at: new Date().toISOString(), downloadCount: j.downloadCount, version: j.version,
-        reviewCount: j.reviewCount ?? null, averageRating: j.averageRating ?? null, publishedAt: j.timestamp ?? null });
       $('dl').textContent = j.downloadCount.toLocaleString();
       $('ver').textContent = 'v' + j.version;
       $('stamp').innerHTML = '<span class="livedot"></span>live as of ' + new Date().toLocaleTimeString() + ' · just now';
