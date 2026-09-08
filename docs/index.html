@@ -45,6 +45,9 @@
   #proj .lab { color:var(--dim); }
   #proj .val { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; }
   #proj .sub2 { text-align:right; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
+  .toprow { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  #refresh.busy { opacity:.6; }
+  .livedot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ok); margin-right:5px; vertical-align:middle; }
 </style>
 </head>
 <body>
@@ -79,8 +82,12 @@
   </div>
 
   <div class="totals">
-    <div>Combined <b id="combined">—</b> checks/day planned · today so far: <b id="today">—</b></div>
+    <div class="toprow">
+      <div>Combined <b id="combined">—</b> checks/day planned · today so far: <b id="today">—</b></div>
+      <button id="refresh" onclick="refreshLive()">Refresh now</button>
+    </div>
     <div style="margin-top:10px">Open VSX downloads (all sources): <span class="big" id="dl">—</span> <span id="stamp" style="color:var(--dim);font-size:12px"></span></div>
+    <div class="where" id="extra" style="margin:6px 0 0"></div>
   </div>
 
   <div class="card" style="margin-top:16px">
@@ -265,7 +272,7 @@ function drawProjection(pts, plannedPerDay) {
     (monitoringShare != null ? ` At the current rate, about ${monitoringShare}% of growth is your own monitoring.` : '');
 }
 
-async function load() {
+async function load(keepLive) {
   try {
     const status = await (await fetch(RAW('data', 'status.json'))).json();
     const g = status.github || {}, i = status.imac || {};
@@ -278,20 +285,84 @@ async function load() {
     const combined = (g.dailyTotal ?? 0) + (i.dailyTotal ?? 0);
     $('combined').textContent = combined || '—';
     $('today').textContent = g.checksToday ?? '—';
-    $('dl').textContent = status.openvsx?.downloadCount != null ? status.openvsx.downloadCount.toLocaleString() : '—';
-    $('ver').textContent = status.openvsx?.version ? 'v' + status.openvsx.version : '';
-    $('stamp').textContent = '· updated ' + new Date(status.updatedAt).toLocaleTimeString();
+    const newestLive = livePoints().at(-1);
+    const branchNewer = !newestLive || new Date(status.updatedAt) > new Date(newestLive.at);
+    if (!keepLive || branchNewer) {
+      $('dl').textContent = status.openvsx?.downloadCount != null ? status.openvsx.downloadCount.toLocaleString() : '—';
+      $('ver').textContent = status.openvsx?.version ? 'v' + status.openvsx.version : '';
+      $('stamp').textContent = '· updated ' + new Date(status.updatedAt).toLocaleTimeString();
+    }
   } catch (e) { $('gh-stats').textContent = 'could not load status.json'; }
 
   try {
     const text = await (await fetch(RAW('data', 'downloads.jsonl'))).text();
-    const pts = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter((p) => p && typeof p.downloadCount === 'number').sort((a, b) => new Date(a.at) - new Date(b.at));
+    const branchPts = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((p) => p && typeof p.downloadCount === 'number');
+    const seen = new Set();
+    const pts = [...branchPts, ...livePoints()]
+      .sort((a, b) => new Date(a.at) - new Date(b.at))
+      .filter((p) => { const k = p.at.slice(0, 16) + ':' + p.downloadCount; if (seen.has(k)) return false; seen.add(k); return true; });
     drawHistory(pts);
     let planned = 0;
     try { const s = await (await fetch(RAW('data', 'status.json'))).json(); planned = (s.github?.dailyTotal || 0) + (s.imac?.dailyTotal || 0); } catch {}
     drawProjection(pts, planned);
   } catch {}
+}
+
+// Manual refresh: reads Open VSX directly in the browser (live, no waiting for the next publish),
+// re-reads the data branch with cache busting, and if a token is saved, recounts today's checks
+// straight from the GitHub API. Live readings are kept in this browser so the chart stays dense.
+const LIVE_KEY = 'promptr_qa_live_points';
+const livePoints = () => { try { return JSON.parse(localStorage.getItem(LIVE_KEY)) || []; } catch { return []; } };
+const addLivePoint = (pt) => {
+  const kept = livePoints().filter((p) => Date.now() - new Date(p.at) < 45 * 86400000);
+  if (!kept.length || kept.at(-1).downloadCount !== pt.downloadCount) kept.push(pt);
+  else kept[kept.length - 1] = pt;
+  localStorage.setItem(LIVE_KEY, JSON.stringify(kept.slice(-600)));
+};
+
+async function refreshLive() {
+  const btn = $('refresh');
+  btn.disabled = true; btn.classList.add('busy'); btn.textContent = 'Refreshing…';
+  try {
+    const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now(), { headers: { 'Cache-Control': 'no-cache' } });
+    const j = await r.json();
+    if (typeof j.downloadCount === 'number') {
+      addLivePoint({ at: new Date().toISOString(), downloadCount: j.downloadCount, version: j.version, live: true });
+      $('dl').textContent = j.downloadCount.toLocaleString();
+      $('ver').textContent = 'v' + j.version;
+      $('stamp').innerHTML = '<span class="livedot"></span>live as of ' + new Date().toLocaleTimeString();
+      const bits = [];
+      if (j.reviewCount != null) bits.push(j.reviewCount + ' review' + (j.reviewCount === 1 ? '' : 's'));
+      if (j.averageRating != null) bits.push((Math.round(j.averageRating * 10) / 10) + '\u2605 average');
+      if (j.timestamp) bits.push('v' + j.version + ' published ' + new Date(j.timestamp).toLocaleDateString());
+      $('extra').textContent = bits.join(' \u00b7 ');
+    }
+    if (tok()) {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const runs = await ghApi('/repos/' + REPO + '/actions/workflows/daily-health-qa.yml/runs?per_page=30');
+        const todays = (runs.workflow_runs || []).filter((x) => x.created_at >= today + 'T00:00:00Z');
+        let ok = 0, bad = 0;
+        for (const run of todays.slice(0, 12)) {
+          const jobs = await ghApi('/repos/' + REPO + '/actions/runs/' + run.id + '/jobs?per_page=100');
+          for (const job of jobs.jobs || []) {
+            if (!job.name.startsWith('Clean install')) continue;
+            if (job.conclusion === 'success') ok++; else if (job.conclusion === 'failure') bad++;
+          }
+        }
+        $('gh-stats').innerHTML = 'today: <b>' + ok + '</b> passed' + (bad ? ', <b style="color:var(--bad)">' + bad + '</b> failed' : '') +
+          ' \u00b7 ' + todays.length + ' runs<br><span class="livedot"></span>live \u00b7 last run: ' +
+          (todays[0] ? new Date(todays[0].created_at).toLocaleTimeString() : '\u2014');
+        $('today').textContent = ok;
+      } catch {}
+    }
+    await load(true);
+  } catch (e) {
+    $('stamp').textContent = '\u00b7 refresh failed: ' + String(e.message).slice(0, 80);
+  } finally {
+    btn.disabled = false; btn.classList.remove('busy'); btn.textContent = 'Refresh now';
+  }
 }
 
 refreshTokenUi();
