@@ -1,6 +1,10 @@
 name: Promptr clean-install variants (manual)
 on:
   push:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'monitor-config.json'
     branches: [main]
   workflow_dispatch:
 permissions:
