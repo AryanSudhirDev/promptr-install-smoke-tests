@@ -1,4 +1,4 @@
 {
-  "imacDailyTotal": 250,
+  "imacDailyTotal": 300,
   "note": "Set from the hosted dashboard. The iMac monitor reads this each run; local config.json is the fallback."
 }
