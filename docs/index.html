@@ -97,7 +97,7 @@
   <header>
     <div>
       <h1>Promptr install monitors</h1>
-      <div class="sub">Clean-install checks of the published extension (<span id="ver">…</span>). Each check downloads once from Open VSX.</div>
+      <div class="sub">Clean-install checks of the published extension (<span id="ver">…</span>). Checks attempt to download from Open VSX.</div>
     </div>
     <button id="refresh" onclick="refreshLive()">Refresh now</button>
   </header>
@@ -111,7 +111,7 @@
         <input type="number" id="gh-total" min="1" max="1000" inputmode="numeric" />
         <button id="gh-save" onclick="save('github')">Save</button>
       </div>
-      <div class="msg" id="gh-msg"></div>
+      <div class="msg" role="status" aria-live="polite" id="gh-msg"></div>
       <div class="where" id="gh-need" style="margin:0"></div>
       <div class="stats" id="gh-stats">loading…</div>
     </div>
@@ -124,503 +124,289 @@
         <input type="number" id="im-total" min="1" max="1000" inputmode="numeric" />
         <button id="im-save" onclick="save('imac')">Save</button>
       </div>
-      <div class="msg" id="im-msg"></div>
+      <div class="msg" role="status" aria-live="polite" id="im-msg"></div>
       <div class="where" id="im-need" style="margin:0"></div>
       <div class="stats" id="im-stats">reads its setting from the repo each run</div>
     </div>
 
     <div class="card c-sum">
       <h2>Open VSX downloads</h2>
-      <div class="where">All sources: your monitoring plus real users.</div>
+      <div class="where">Public registry counter, including monitoring and other sources.</div>
       <div class="headline">
         <span class="big" id="dl">—</span>
         <span id="stamp" style="color:var(--dim);font-size:12px"></span>
       </div>
       <div class="where" id="extra" style="margin:6px 0 0"></div>
-      <div class="stats">Combined <b id="combined">—</b> checks/day planned · today so far: <b id="today">—</b></div>
+      <div class="stats">Combined <b id="combined">—</b> checks/day configured · GitHub passed today (UTC): <b id="today">—</b></div>
     </div>
 
     <div class="card c-chart">
       <h2>Download progression</h2>
-      <div class="where">Public counter over time, recorded every 30 minutes.</div>
+      <div class="where">Public counter observations. Gaps are not interpolated as measured activity.</div>
       <div id="win" class="winrow"></div>
       <svg id="chart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
       <div class="where" id="chart-note" style="margin:6px 0 0"></div>
       <div style="margin-top:12px">
-        <div class="where" style="margin-bottom:4px">Downloads per hour</div>
+        <div class="where" style="margin-bottom:4px">Observed counter changes by capture hour (UTC)</div>
         <svg id="bars" viewBox="0 0 800 110" preserveAspectRatio="none"></svg>
       </div>
     </div>
 
     <div class="card c-proj">
-      <h2>Projection</h2>
+      <h2>Trend scenario</h2>
       <div class="where" id="proj-basis">…</div>
       <table id="proj"></table>
       <div class="where" id="proj-note" style="margin:10px 0 0"></div>
     </div>
 
     <details class="card c-token" id="tokbox">
-      <summary>Token (needed only to change the numbers)</summary>
+      <summary>Dashboard key (needed only to change the numbers)</summary>
       <div class="row" style="margin-top:12px">
-        <input type="password" id="token" placeholder="github_pat_… (stored only in this browser)" autocomplete="off" />
+        <input type="password" id="token" aria-label="Dashboard key" placeholder="Dashboard key" autocomplete="off" />
         <button onclick="saveToken()">Save</button>
         <button class="secondary" onclick="clearToken()">Clear</button>
       </div>
-      <div class="msg" id="tok-msg"></div>
+      <div class="msg" role="status" aria-live="polite" id="tok-msg"></div>
       <div class="hint" id="tok-hint">
-        Viewing needs nothing. To change the numbers, create a fine-grained token on
-        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com</a>
-        limited to <code>promptr-install-smoke-tests</code> with <b>Variables: read and write</b> and
-        <b>Contents: read and write</b>. It is kept in this browser's localStorage only, sent only to
-        api.github.com, and never stored in the repo.
+        Viewing needs nothing. Writes use only the canonical Vercel API. Enter a dashboard key, never a GitHub token. The key is stored in this browser when storage is available; otherwise it lasts only for this page session.
       </div>
     </details>
   </div>
 
   <div class="foot">
-    Changes apply at the next half-hour slot; nothing restarts.
+    Accepted settings are used by subsequent scheduled runs; scheduling and execution can be delayed.
     GitHub's number is a repo variable; the iMac reads <code>monitor-config.json</code> from the repo each run.
     <a href="https://github.com/AryanSudhirDev/promptr-install-smoke-tests" target="_blank" rel="noopener">repo</a>
   </div>
 
 <script>
+
 const REPO = 'AryanSudhirDev/promptr-install-smoke-tests';
-const RAW = (branch, file) => `https://raw.githubusercontent.com/${REPO}/${branch}/${file}?t=${Date.now()}`;
-const $ = (id) => document.getElementById(id);
-const tok = () => localStorage.getItem('promptr_qa_token') || '';
-
-// Two ways to save, chosen automatically:
-//  - On the Vercel deployment: POST /api/settings with a short dashboard key. The GitHub token
-//    stays in Vercel's env, never in this browser.
-//  - Anywhere else (GitHub Pages, local file): call api.github.com directly with a token you paste.
-const KEY_STORE = 'promptr_qa_dash_key';
-// The write endpoint lives on the Vercel deployment. When this page is served from GitHub Pages
-// (or opened locally) it calls that same function cross-origin, so one dashboard key works everywhere.
-const API_BASE = location.hostname.endsWith('vercel.app') ? '' : 'https://promptr-qa-dashboard.vercel.app';
-const dashKey = () => localStorage.getItem(KEY_STORE) || '';
-let serverWritable = null; // null = unknown yet
-
-async function detectServer() {
-  try {
-    const r = await fetch(API_BASE + '/api/settings', { method: 'GET' });
-    if (!r.ok) { serverWritable = false; return; }
-    serverWritable = Boolean((await r.json()).writable);
-  } catch { serverWritable = false; }
-  refreshTokenUi();
-}
-
-function saveToken() {
-  const v = $('token').value.trim();
-  if (v) localStorage.setItem(serverWritable ? KEY_STORE : 'promptr_qa_token', v);
-  $('token').value = '';
-  $('tok-msg').className = 'msg ok';
-  $('tok-msg').textContent = v ? 'saved in this browser \u2014 the Save buttons are live now' : 'nothing entered';
-  refreshTokenUi();
-  if (v) $('tokbox').open = false;
-}
-function clearToken() {
-  localStorage.removeItem('promptr_qa_token');
-  localStorage.removeItem(KEY_STORE);
-  $('tok-msg').className = 'msg';
-  $('tok-msg').textContent = 'cleared';
-  refreshTokenUi();
-}
-const canWrite = () => (serverWritable ? !!dashKey() : !!tok());
-
-function refreshTokenUi() {
-  const has = canWrite();
-  const label = serverWritable ? 'dashboard key' : 'GitHub token';
-  for (const id of ['gh-save', 'im-save']) {
-    const b = $(id);
-    b.disabled = false;
-    b.textContent = has ? 'Save' : 'Save \u2026';
-    b.title = has ? 'Save this number' : 'Needs a ' + label + ' (click to set one up)';
-    b.classList.toggle('secondary', !has);
-  }
-  for (const id of ['gh-need', 'im-need']) $(id).textContent = has ? '' : 'read-only \u2014 add a ' + label + ' to change this';
-  $('tokbox').querySelector('summary').textContent = has
-    ? 'Key saved in this browser (click to change or remove)'
-    : 'Add a ' + label + ' to change the numbers (viewing needs nothing)';
-  const hint = $('tok-hint');
-  if (hint) hint.innerHTML = serverWritable
-    ? 'This deployment keeps the GitHub token on the server. Enter the short dashboard key instead; it is stored in this browser only and grants nothing beyond changing these two numbers.'
-    : 'Viewing needs nothing. To change the numbers, create a fine-grained token on <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com</a> limited to <code>promptr-install-smoke-tests</code> with <b>Variables: read and write</b> and <b>Contents: read and write</b>. It is kept in this browser\u2019s localStorage only, sent only to api.github.com, and never stored in the repo.';
-  const ph = $('token');
-  if (ph) ph.placeholder = serverWritable ? 'dashboard key (stored only in this browser)' : 'github_pat_\u2026 (stored only in this browser)';
-}
-
-async function save(target) {
-  const input = target === 'github' ? $('gh-total') : $('im-total');
-  const msg = target === 'github' ? $('gh-msg') : $('im-msg');
-  if (!canWrite()) {
-    msg.className = 'msg bad';
-    msg.textContent = 'a ' + (serverWritable ? 'dashboard key' : 'GitHub token') + ' is needed to save \u2014 opening the box below';
-    $('tokbox').open = true;
-    $('tokbox').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => $('token').focus(), 400);
-    return;
-  }
-  const n = Math.round(Number(input.value));
-  if (!Number.isFinite(n) || n < 1 || n > 1000) { msg.className = 'msg bad'; msg.textContent = 'enter 1-1000'; return; }
-  msg.className = 'msg'; msg.textContent = 'saving\u2026';
-  try {
-    if (serverWritable) {
-      const r = await fetch(API_BASE + '/api/settings', { method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-dash-key': dashKey() },
-        body: JSON.stringify({ target, total: n }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    } else if (target === 'github') {
-      await ghApi('/repos/' + REPO + '/actions/variables/MONITOR_CHECKS_PER_DAY', {
-        method: 'PATCH', body: JSON.stringify({ name: 'MONITOR_CHECKS_PER_DAY', value: String(n) }) });
-    } else {
-      const cur = await ghApi('/repos/' + REPO + '/contents/monitor-config.json');
-      const body = JSON.stringify({ imacDailyTotal: n, note: 'Set from the hosted dashboard. The iMac monitor reads this each run; local config.json is the fallback.' }, null, 2) + '\n';
-      await ghApi('/repos/' + REPO + '/contents/monitor-config.json', { method: 'PUT', body: JSON.stringify({
-        message: 'Set iMac checks per day to ' + n + ' [skip ci]', content: btoa(body), sha: cur.sha }) });
-    }
-    msg.className = 'msg ok';
-    msg.textContent = 'saved: ' + n + '/day, applies at the next slot';
-  } catch (e) {
-    msg.className = 'msg bad';
-    const t = String(e.message);
-    msg.textContent = /401|wrong or missing/.test(t) ? 'key rejected \u2014 check the dashboard key'
-      : /403/.test(t) ? 'token rejected: needs Variables + Contents read/write on this repo' : t.slice(0, 140);
-  }
-}
-
-// Hover / touch readout for the charts: nearest point, its exact count, when it was recorded,
-// and the change since the previous reading.
-let chartPoints = [];   // [{vx, vy, p}] in viewBox units
-let barPoints = [];     // [{vx0, vx1, hour, count}]
-
-function tipEl() {
-  let t = document.getElementById('tip');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'tip';
-    t.className = 'tip';
-    document.body.appendChild(t);
-  }
-  return t;
-}
-
-function hideTip() {
-  tipEl().style.display = 'none';
-  const g = document.getElementById('guide');
-  if (g) g.setAttribute('opacity', '0');
-  const m = document.getElementById('marker');
-  if (m) m.setAttribute('opacity', '0');
-}
-
-function showTip(html, clientX, clientY) {
-  const t = tipEl();
-  t.innerHTML = html;
-  t.style.display = 'block';
-  const r = t.getBoundingClientRect();
-  let x = clientX + 14, y = clientY - r.height - 12;
-  if (x + r.width > window.innerWidth - 8) x = clientX - r.width - 14;
-  if (y < 8) y = clientY + 18;
-  t.style.left = Math.max(8, x) + 'px';
-  t.style.top = y + 'px';
-}
-
-const fmtWhen = (iso) => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-function attachChartHover() {
-  const svg = document.getElementById('chart');
-  if (!svg || svg.dataset.hover === '1') return;
-  svg.dataset.hover = '1';
-  const handle = (ev) => {
-    if (!chartPoints.length) return;
-    const touch = ev.touches && ev.touches[0];
-    const clientX = touch ? touch.clientX : ev.clientX;
-    const clientY = touch ? touch.clientY : ev.clientY;
-    const rect = svg.getBoundingClientRect();
-    const vx = ((clientX - rect.left) / rect.width) * 800;   // viewBox is 0..800 wide
-    let best = chartPoints[0], bestD = Infinity;
-    for (const c of chartPoints) { const d = Math.abs(c.vx - vx); if (d < bestD) { bestD = d; best = c; } }
-    const idx = chartPoints.indexOf(best);
-    const prev = idx > 0 ? chartPoints[idx - 1] : null;
-    const delta = prev ? best.p.downloadCount - prev.p.downloadCount : null;
-    const mins = prev ? Math.round((new Date(best.p.at) - new Date(prev.p.at)) / 60000) : null;
-    const guide = document.getElementById('guide');
-    const marker = document.getElementById('marker');
-    if (guide) { guide.setAttribute('x1', best.vx); guide.setAttribute('x2', best.vx); guide.setAttribute('opacity', '1'); }
-    if (marker) { marker.setAttribute('cx', best.vx); marker.setAttribute('cy', best.vy); marker.setAttribute('opacity', '1'); }
-    const rows = [
-      '<div class="tip-n">' + best.p.downloadCount.toLocaleString() + ' downloads</div>',
-      '<div class="tip-s">' + fmtWhen(best.p.at) + '</div>',
-    ];
-    if (delta != null) rows.push('<div class="tip-s">' + (delta >= 0 ? '+' : '') + delta + ' since previous reading' + (mins != null ? ' (' + (mins >= 60 ? Math.round(mins / 60) + ' h' : mins + ' min') + ' earlier)' : '') + '</div>');
-    if (best.p.approx) rows.push('<div class="tip-s">approximate reading</div>');
-    if (best.p.live) rows.push('<div class="tip-s">manual refresh</div>');
-    showTip(rows.join(''), clientX, clientY);
-    if (touch) ev.preventDefault();
-  };
-  svg.addEventListener('mousemove', handle);
-  svg.addEventListener('touchstart', handle, { passive: false });
-  svg.addEventListener('touchmove', handle, { passive: false });
-  svg.addEventListener('mouseleave', hideTip);
-  svg.addEventListener('touchend', hideTip);
-}
-
-function attachBarsHover() {
-  const svg = document.getElementById('bars');
-  if (!svg || svg.dataset.hover === '1') return;
-  svg.dataset.hover = '1';
-  const handle = (ev) => {
-    if (!barPoints.length) return;
-    const touch = ev.touches && ev.touches[0];
-    const clientX = touch ? touch.clientX : ev.clientX;
-    const clientY = touch ? touch.clientY : ev.clientY;
-    const rect = svg.getBoundingClientRect();
-    const vx = ((clientX - rect.left) / rect.width) * 800;
-    const hit = barPoints.find((b) => vx >= b.vx0 && vx <= b.vx1) || null;
-    if (!hit) { hideTip(); return; }
-    showTip('<div class="tip-n">' + hit.count + ' download' + (hit.count === 1 ? '' : 's') + '</div><div class="tip-s">' +
-      new Date(hit.hour).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' }) + ' \u2013 next hour</div>', clientX, clientY);
-    if (touch) ev.preventDefault();
-  };
-  svg.addEventListener('mousemove', handle);
-  svg.addEventListener('touchstart', handle, { passive: false });
-  svg.addEventListener('touchmove', handle, { passive: false });
-  svg.addEventListener('mouseleave', hideTip);
-  svg.addEventListener('touchend', hideTip);
-}
-
-function drawHistory(pts) {
-  const svg = $('chart');
-  if (pts.length < 2) { svg.innerHTML = '<text x="10" y="30" fill="#98a0b3" font-size="13">collecting data…</text>'; return; }
-  const at = (p) => new Date(p.at).getTime();
-  const last = pts.at(-1);
-  const growth = (ms) => {
-    const cutoff = Date.now() - ms;
-    const base = [...pts].reverse().find((p) => at(p) <= cutoff) || pts[0];
-    const hours = (at(last) - at(base)) / 3600000;
-    return { delta: last.downloadCount - base.downloadCount, perHour: hours > 0 ? Math.round(((last.downloadCount - base.downloadCount) / hours) * 10) / 10 : null, approx: !!base.approx };
-  };
-  $('win').innerHTML = [['Last hour', 3600000], ['Last 6 h', 6 * 3600000], ['Last 24 h', 24 * 3600000], ['Since tracking began', 1e13]]
-    .map(([label, ms]) => { const v = growth(ms);
-      return `<div class="win"><b>${v.delta > 0 ? '+' : ''}${v.delta.toLocaleString()}</b>${label}${v.perHour != null ? ` · ${v.perHour}/h` : ''}${v.approx ? ' *' : ''}</div>`; }).join('');
-
-  const W = 800, H = 220, pad = { l: 54, r: 10, t: 12, b: 22 };
-  const xs = pts.map(at), ys = pts.map((p) => p.downloadCount);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const px = (t) => pad.l + ((t - x0) / Math.max(1, x1 - x0)) * (W - pad.l - pad.r);
-  const py = (v) => H - pad.b - ((v - y0) / Math.max(1, y1 - y0)) * (H - pad.t - pad.b);
-  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${px(at(p)).toFixed(1)},${py(p.downloadCount).toFixed(1)}`).join(' ');
-  const ticks = [y0, Math.round((y0 + y1) / 2), y1];
-  chartPoints = pts.map((p) => ({ vx: px(at(p)), vy: py(p.downloadCount), p }));
-  svg.innerHTML = ticks.map((v) => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${py(v)}" y2="${py(v)}" stroke="var(--line)"/><text x="${pad.l - 8}" y="${py(v) + 4}" text-anchor="end" fill="var(--dim)" font-size="11">${v.toLocaleString()}</text>`).join('')
-    + `<path d="${line} L${px(x1).toFixed(1)},${H - pad.b} L${px(x0).toFixed(1)},${H - pad.b} Z" fill="var(--accent)" opacity="0.13"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/>`
-    + pts.map((p) => `<circle cx="${px(at(p)).toFixed(1)}" cy="${py(p.downloadCount).toFixed(1)}" r="${p.approx ? 3 : 2}" fill="${p.approx ? 'var(--dim)' : 'var(--accent)'}"><title>${new Date(p.at).toLocaleString()}: ${p.downloadCount.toLocaleString()}</title></circle>`).join('')
-    + `<text x="${pad.l}" y="${H - 6}" fill="var(--dim)" font-size="11">${new Date(x0).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' })}</text>`
-    + `<text x="${W - pad.r}" y="${H - 6}" text-anchor="end" fill="var(--dim)" font-size="11">${new Date(x1).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' })}</text>`
-    + `<line id="guide" x1="0" x2="0" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`
-    + `<circle id="marker" r="4.5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>`;
-  attachChartHover();
-  $('chart-note').textContent = `${pts.length} readings${pts.some((p) => p.approx) ? ' · grey points are approximate' : ''}`;
-
-  const buckets = new Map();
-  for (let i = 1; i < pts.length; i++) {
-    const d = pts[i].downloadCount - pts[i - 1].downloadCount;
-    if (d > 0) { const k = new Date(pts[i].at).toISOString().slice(0, 13) + ':00Z'; buckets.set(k, (buckets.get(k) || 0) + d); }
-  }
-  const per = [...buckets.entries()].map(([hour, count]) => ({ hour, count })).slice(-48);
-  const bars = $('bars');
-  if (!per.length) { bars.innerHTML = ''; return; }
-  const BW = 800, BH = 110, bp = { l: 54, r: 10, t: 8, b: 20 };
-  const max = Math.max(...per.map((b) => b.count), 1), bw = (BW - bp.l - bp.r) / per.length;
-  barPoints = per.map((b, i) => ({ vx0: bp.l + i * bw, vx1: bp.l + (i + 1) * bw, hour: b.hour, count: b.count }));
-  bars.innerHTML = `<line x1="${bp.l}" x2="${BW - bp.r}" y1="${BH - bp.b}" y2="${BH - bp.b}" stroke="var(--line)"/><text x="${bp.l - 8}" y="${bp.t + 10}" text-anchor="end" fill="var(--dim)" font-size="11">${max}</text>`
-    + per.map((b, i) => { const h = (b.count / max) * (BH - bp.t - bp.b);
-        return `<rect x="${(bp.l + i * bw + 1).toFixed(1)}" y="${(BH - bp.b - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" fill="var(--accent)" opacity="0.75"><title>${new Date(b.hour).toLocaleString()}: ${b.count}</title></rect>`; }).join('');
-  attachBarsHover();
-}
-
-// Projected totals at fixed dates, from the observed rate and, separately, from the planned
-// monitoring rate alone, so it is obvious how much of the curve is our own testing.
-function drawProjection(pts, plannedPerDay) {
-  if (pts.length < 2) { $('proj-basis').textContent = 'not enough history yet'; return; }
-  const at = (p) => new Date(p.at).getTime();
-  const last = pts.at(-1);
-  const pickBase = (ms) => { const cutoff = Date.now() - ms; return [...pts].reverse().find((p) => at(p) <= cutoff) || pts[0]; };
-  // prefer a 7-day window, fall back to whatever exists
-  let base = pickBase(7 * 86400000);
-  if (at(last) - at(base) < 6 * 3600000) base = pts[0];
-  const days = (at(last) - at(base)) / 86400000;
-  const perDay = days > 0 ? (last.downloadCount - base.downloadCount) / days : 0;
-  const hours = Math.round(days * 24 * 10) / 10;
-
-  $('proj-basis').innerHTML = `Observed <b>${Math.round(perDay).toLocaleString()}/day</b> over the last ${hours} h` +
-    (plannedPerDay ? ` · planned monitoring <b>${plannedPerDay.toLocaleString()}/day</b>` : '') +
-    `${base.approx ? ' · window starts on an approximate reading' : ''}`;
-
-  const targets = [['Nov 1, 2026', Date.UTC(2026, 10, 1)], ['Jan 1, 2027', Date.UTC(2027, 0, 1)]];
-  $('proj').innerHTML = targets.map(([label, t]) => {
-    const d = Math.max(0, (t - Date.now()) / 86400000);
-    const observed = Math.round(last.downloadCount + perDay * d);
-    const monitoringOnly = plannedPerDay ? Math.round(last.downloadCount + plannedPerDay * d) : null;
-    return `<tr><td class="lab">${label}<br><span style="font-size:12px">in ${Math.round(d)} days</span></td>` +
-      `<td class="val">~${observed.toLocaleString()}` +
-      (monitoringOnly ? `<div class="sub2">~${monitoringOnly.toLocaleString()} if only monitoring ran</div>` : '') +
-      `</td></tr>`;
-  }).join('');
-
-  const monitoringShare = plannedPerDay && perDay > 0 ? Math.min(100, Math.round((plannedPerDay / perDay) * 100)) : null;
-  $('proj-note').textContent = `Straight-line estimate from ${pts.length} readings; it will sharpen as history builds.` +
-    (monitoringShare != null ? ` At the current rate, about ${monitoringShare}% of growth is your own monitoring.` : '');
-}
-
-// The counter only goes up, so any stored reading above the current live value is bogus
-// (stale or inconsistent edge response) and must not be shown or charted.
-function pruneImpossible(currentCount) {
-  if (typeof currentCount !== 'number') return;
-  try {
-    localStorage.setItem(LIVE_KEY, JSON.stringify(livePoints().filter((p) => p.downloadCount <= currentCount)));
-    const meta = getLiveMeta();
-    if (meta && meta.downloadCount > currentCount) localStorage.removeItem(LIVE_META_KEY);
-  } catch {}
-}
-
-// Reads the registry directly. Cheap, public and allowed from the browser, so every device shows
-// the same number instead of waiting for the hourly publish.
-async function fetchLive() {
-  const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());
-  const j = await r.json();
-  if (typeof j.downloadCount !== 'number') throw new Error('no downloadCount');
-  pruneImpossible(j.downloadCount);
-  const now = new Date().toISOString();
-  setLiveMeta({ at: now, downloadCount: j.downloadCount, version: j.version,
-    reviewCount: j.reviewCount ?? null, averageRating: j.averageRating ?? null, publishedAt: j.timestamp ?? null });
-  addLivePoint({ at: now, downloadCount: j.downloadCount, version: j.version, live: true });
-  return j;
-}
-
-const LIVE_META_KEY = 'promptr_qa_live_meta';
-const getLiveMeta = () => { try { return JSON.parse(localStorage.getItem(LIVE_META_KEY)); } catch { return null; } };
-const setLiveMeta = (m) => localStorage.setItem(LIVE_META_KEY, JSON.stringify(m));
-
-// Shows whichever reading is newer: the last manual refresh (kept in this browser) or the
-// snapshot published to the data branch. Without this a page reload would look like it went backwards.
-function renderCount(status) {
-  const meta = getLiveMeta();
-  const published = status?.updatedAt ? new Date(status.updatedAt) : null;
-  const liveAt = meta?.at ? new Date(meta.at) : null;
-  const useLive = liveAt && (!published || liveAt > published);
-  const src = useLive ? meta : status?.openvsx;
-  if (!src) return;
-  if (src.downloadCount != null) $('dl').textContent = src.downloadCount.toLocaleString();
-  if (src.version) $('ver').textContent = 'v' + src.version;
-  const when = useLive ? liveAt : published;
-  const ageMin = when ? Math.round((Date.now() - when.getTime()) / 60000) : null;
-  const ageText = ageMin == null ? '' : ageMin < 1 ? 'just now' : ageMin < 60 ? ageMin + ' min ago' : Math.round(ageMin / 60) + ' h ago';
-  $('stamp').innerHTML = useLive
-    ? '<span class="livedot"></span>live as of ' + when.toLocaleTimeString() + ' \u00b7 ' + ageText
-    : '\u00b7 published ' + (when ? when.toLocaleTimeString() : '\u2014') + ' \u00b7 ' + ageText;
-  if (useLive && meta) {
-    const bits = [];
-    if (meta.reviewCount != null) bits.push(meta.reviewCount + ' review' + (meta.reviewCount === 1 ? '' : 's'));
-    if (meta.averageRating != null) bits.push((Math.round(meta.averageRating * 10) / 10) + '\u2605 average');
-    if (meta.publishedAt) bits.push('v' + meta.version + ' published ' + new Date(meta.publishedAt).toLocaleDateString());
-    if (bits.length) $('extra').textContent = bits.join(' \u00b7 ');
-  }
-}
-
-async function load(keepLive) {
-  try {
-    const status = await (await fetch(RAW('data', 'status.json'))).json();
-    const g = status.github || {}, i = status.imac || {};
-    if (document.activeElement !== $('gh-total') && g.dailyTotal != null) $('gh-total').value = g.dailyTotal;
-    if (document.activeElement !== $('im-total') && i.dailyTotal != null) $('im-total').value = i.dailyTotal;
-    $('gh-dot').className = 'dot ' + (g.failedToday ? 'warn' : 'ok');
-    $('gh-stats').innerHTML = `today: <b>${g.checksToday ?? 0}</b> passed${g.failedToday ? `, <b style="color:var(--bad)">${g.failedToday}</b> failed` : ''} · ${g.runsToday ?? 0} runs<br>last run: ${g.lastRunAt ? new Date(g.lastRunAt).toLocaleTimeString() : '—'}`;
-    $('im-dot').className = 'dot ' + (i.dailyTotal != null ? 'ok' : 'bad');
-    $('im-stats').innerHTML = `set to <b>${i.dailyTotal ?? '—'}</b>/day · reads this from the repo each run<br><span style="font-size:12px">live per-check status is on the iMac's local dashboard</span>`;
-    const combined = (g.dailyTotal ?? 0) + (i.dailyTotal ?? 0);
-    $('combined').textContent = combined || '—';
-    $('today').textContent = g.checksToday ?? '—';
-    renderCount(status);
-    // Always confirm against the registry so a stored reading can never outlive reality.
-    try { await fetchLive(); renderCount(status); } catch {}
-  } catch (e) { $('gh-stats').textContent = 'could not load status.json'; }
-
-  try {
-    const text = await (await fetch(RAW('data', 'downloads.jsonl'))).text();
-    const branchPts = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter((p) => p && typeof p.downloadCount === 'number');
-    const seen = new Set();
-    const pts = [...branchPts, ...livePoints()]
-      .sort((a, b) => new Date(a.at) - new Date(b.at))
-      .filter((p) => { const k = p.at.slice(0, 16) + ':' + p.downloadCount; if (seen.has(k)) return false; seen.add(k); return true; });
-    drawHistory(pts);
-    let planned = 0;
-    try { const s = await (await fetch(RAW('data', 'status.json'))).json(); planned = (s.github?.dailyTotal || 0) + (s.imac?.dailyTotal || 0); } catch {}
-    drawProjection(pts, planned);
-  } catch {}
-}
-
-// Manual refresh: reads Open VSX directly in the browser (live, no waiting for the next publish),
-// re-reads the data branch with cache busting, and if a token is saved, recounts today's checks
-// straight from the GitHub API. Live readings are kept in this browser so the chart stays dense.
-const LIVE_KEY = 'promptr_qa_live_points';
-const livePoints = () => { try { return JSON.parse(localStorage.getItem(LIVE_KEY)) || []; } catch { return []; } };
-const addLivePoint = (pt) => {
-  const kept = livePoints().filter((p) => Date.now() - new Date(p.at) < 45 * 86400000);
-  if (!kept.length || kept.at(-1).downloadCount !== pt.downloadCount) kept.push(pt);
-  else kept[kept.length - 1] = pt;
-  localStorage.setItem(LIVE_KEY, JSON.stringify(kept.slice(-600)));
+// Never select a credential destination from the current hostname or API availability.
+const API = 'https://promptr-qa-dashboard.vercel.app/api/settings';
+const RAW = file => 'https://raw.githubusercontent.com/' + REPO + '/data/' + file + '?t=' + Date.now();
+const $ = id => document.getElementById(id);
+const KEY_STORE = 'promptr_qa_dash_key', LIVE_KEY = 'promptr_qa_live_points', META_KEY = 'promptr_qa_live_meta';
+const memory = new Map();
+let persistentStorage = true;
+const storage = {
+  get(key) { if (memory.has(key)) return memory.get(key); try { return localStorage.getItem(key); } catch { persistentStorage = false; return null; } },
+  set(key, value) { memory.set(key, value); try { localStorage.setItem(key, value); } catch { persistentStorage = false; } },
+  remove(key) { memory.set(key, null); try { localStorage.removeItem(key); } catch { persistentStorage = false; } }
 };
-
-async function refreshLive() {
-  const btn = $('refresh');
-  btn.disabled = true; btn.classList.add('busy'); btn.textContent = 'Refreshing…';
+// Retire the old browser GitHub credential without reading or reusing it.
+storage.remove('promptr_qa_token');
+const dashboardKey = () => { const key = storage.get(KEY_STORE); return typeof key === 'string' && !/^(github_pat_|gh[pousr]_)/i.test(key.trim()) ? key.trim() : ''; };
+const readJSON = key => { try { return JSON.parse(storage.get(key)); } catch { return null; } };
+const count = n => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
+const rate = n => count(n) !== null && n >= 1 && n <= 1000 ? n : null;
+const timestamp = value => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const n = Date.parse(value); return Number.isFinite(n) && n <= Date.now() + 60000 ? n : null;
+};
+const fmt = n => n === null ? 'unknown' : n.toLocaleString();
+const when = value => { const t = timestamp(value); return t === null ? 'unknown' : new Date(t).toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'UTC', timeZoneName:'short'}); };
+const point = p => p && timestamp(p.at) !== null && count(p.downloadCount) !== null ? {at:new Date(timestamp(p.at)).toISOString(), downloadCount:p.downloadCount, approx:p.approx === true, live:p.live === true} : null;
+const points = list => Array.isArray(list) ? list.map(point).filter(Boolean) : [];
+const livePoints = () => points(readJSON(LIVE_KEY));
+function addLivePoint(p) {
+  // Keep unchanged observations: moving an old point would erase the plateau's start.
+  const kept = livePoints().filter(x => timestamp(x.at) >= Date.now() - 45 * 86400000);
+  kept.push(p); storage.set(LIVE_KEY, JSON.stringify(kept.slice(-600)));
+}
+async function request(url, options = {}, kind = 'json') {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    // No custom headers: Open VSX's CORS policy does not allow a Cache-Control request header
-    // (it would trigger a preflight that fails). The cb= query param defeats caching on its own.
-    const j = await fetchLive();
-    if (typeof j.downloadCount === 'number') {
-      $('dl').textContent = j.downloadCount.toLocaleString();
-      $('ver').textContent = 'v' + j.version;
-      $('stamp').innerHTML = '<span class="livedot"></span>live as of ' + new Date().toLocaleTimeString() + ' · just now';
-      const bits = [];
-      if (j.reviewCount != null) bits.push(j.reviewCount + ' review' + (j.reviewCount === 1 ? '' : 's'));
-      if (j.averageRating != null) bits.push((Math.round(j.averageRating * 10) / 10) + '\u2605 average');
-      if (j.timestamp) bits.push('v' + j.version + ' published ' + new Date(j.timestamp).toLocaleDateString());
-      $('extra').textContent = bits.join(' \u00b7 ');
-    }
-    if (tok()) {
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        const runs = await ghApi('/repos/' + REPO + '/actions/workflows/daily-health-qa.yml/runs?per_page=30');
-        const todays = (runs.workflow_runs || []).filter((x) => x.created_at >= today + 'T00:00:00Z');
-        let ok = 0, bad = 0;
-        for (const run of todays.slice(0, 12)) {
-          const jobs = await ghApi('/repos/' + REPO + '/actions/runs/' + run.id + '/jobs?per_page=100');
-          for (const job of jobs.jobs || []) {
-            if (!job.name.startsWith('Clean install')) continue;
-            if (job.conclusion === 'success') ok++; else if (job.conclusion === 'failure') bad++;
-          }
-        }
-        $('gh-stats').innerHTML = 'today: <b>' + ok + '</b> passed' + (bad ? ', <b style="color:var(--bad)">' + bad + '</b> failed' : '') +
-          ' \u00b7 ' + todays.length + ' runs<br><span class="livedot"></span>live \u00b7 last run: ' +
-          (todays[0] ? new Date(todays[0].created_at).toLocaleTimeString() : '\u2014');
-        $('today').textContent = ok;
-      } catch {}
-    }
-    await load(true);
+    const r = await fetch(url, {...options, signal:controller.signal, cache:'no-store', credentials:'omit', redirect:'error'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r[kind]();
+  } catch (e) { if (e.name === 'AbortError') throw new Error('request timed out'); throw e; }
+  finally { clearTimeout(timeout); }
+}
+let serverWritable = false, saving = false, refreshing = null, revision = 0;
+let statusData = null, branchPoints = [], historyFailed = false, statusFailed = false, liveFailed = true;
+let invalidHistoryRows = 0;
+let liveMeta = readJSON(META_KEY);
+if (!point(liveMeta)) liveMeta = null;
+const settings = {github:null, imac:null};
+const authoritative = {github:false, imac:false};
+const pending = {github:null, imac:null};
+const dirty = {github:false, imac:false};
+const prefix = target => target === 'github' ? 'gh' : 'im';
+function renderSettings() {
+  for (const target of ['github','imac']) {
+    const id = prefix(target), value = settings[target];
+    if (!dirty[target] && !saving) $(id + '-total').value = value === null ? '' : value;
+    $(id + '-need').textContent = 'Configured: ' + fmt(value) + '/day' + (pending[target] ? ' (accepted, awaiting server confirmation)' : authoritative[target] ? ' (server setting)' : ' (published snapshot)');
+    $(id + '-save').disabled = saving || !serverWritable;
+    $(id + '-total').disabled = saving;
+  }
+  $('combined').textContent = settings.github === null || settings.imac === null ? 'unknown' : fmt(settings.github + settings.imac);
+  $('im-dot').className = 'dot';
+  $('im-stats').textContent = 'Health unknown. Configuration is not proof of execution; per-check status is available only on the iMac’s local dashboard.';
+}
+function refreshTokenUi() {
+  renderSettings();
+  $('tokbox').querySelector('summary').textContent = !serverWritable ? 'Settings service unavailable or read-only; writes disabled' : dashboardKey() ? 'Dashboard key saved (click to change or remove)' : 'Add a dashboard key to change the numbers';
+}
+function saveToken() {
+  const value = $('token').value.trim(); $('token').value = '';
+  if (/^(github_pat_|gh[pousr]_)/i.test(value)) { $('tok-msg').textContent = 'Use a dashboard key, not a GitHub token.'; return; }
+  if (!value) { $('tok-msg').textContent = 'No key entered.'; return; }
+  storage.set(KEY_STORE, value);
+  $('tok-msg').textContent = persistentStorage ? 'Dashboard key saved in this browser; verified only when you save a setting.' : 'Storage unavailable. Key kept in memory for this page session only.';
+  refreshTokenUi();
+}
+function clearToken() { storage.remove(KEY_STORE); $('token').value = ''; $('tok-msg').textContent = 'Dashboard key cleared.'; refreshTokenUi(); }
+async function save(target) {
+  if (!['github','imac'].includes(target) || saving) return;
+  const id = prefix(target), msg = $(id + '-msg');
+  if (!serverWritable) { msg.textContent = 'Settings service unavailable. Refresh to retry; no fallback writes are allowed.'; return; }
+  const key = dashboardKey();
+  if (!key) { $('tokbox').open = true; $('token').focus(); msg.textContent = 'Enter a dashboard key below.'; return; }
+  const value = $(id + '-total').value.trim(), n = Number(value);
+  if (!value || rate(n) === null) { msg.textContent = 'Enter a whole number from 1 to 1000.'; return; }
+  saving = true; revision++; refreshTokenUi(); msg.className = 'msg'; msg.textContent = 'Saving…';
+  try {
+    const j = await request(API, {method:'POST', headers:{'Content-Type':'application/json','x-dash-key':key}, body:JSON.stringify({target,total:n})});
+    if (j?.ok !== true || j.target !== target || rate(j.total) !== n) throw new Error('unexpected save response');
+    settings[target] = n; pending[target] = {value:n}; dirty[target] = false;
+    msg.className = 'msg ok'; msg.textContent = 'Accepted: ' + n + '/day. Awaiting a fresh server read; execution is not guaranteed.';
   } catch (e) {
-    $('stamp').textContent = '\u00b7 refresh failed: ' + String(e.message).slice(0, 80);
-  } finally {
-    btn.disabled = false; btn.classList.remove('busy'); btn.textContent = 'Refresh now';
+    msg.className = 'msg bad'; msg.textContent = /HTTP 401|HTTP 403/.test(e.message) ? 'Dashboard key rejected or writes forbidden.' : 'Save not confirmed (' + e.message + '). Refresh before retrying; the server may have accepted it.';
+  } finally { saving = false; revision++; refreshTokenUi(); }
+}
+function applySettings(j, readRevision) {
+  if (!j || j.repo !== REPO || typeof j.writable !== 'boolean') throw new Error('unexpected settings service');
+  serverWritable = j.writable;
+  if (saving || revision !== readRevision) return;
+  for (const target of ['github','imac']) {
+    if (!j.settings || !Object.prototype.hasOwnProperty.call(j.settings, target)) continue;
+    const value = rate(j.settings[target]);
+    authoritative[target] = true;
+    if (pending[target]) {
+      if (value === null) continue; // partial server failure cannot undo an accepted write
+      if (value === pending[target].value) $(prefix(target) + '-msg').textContent = 'Saved and confirmed: ' + value + '/day.';
+      else $(prefix(target) + '-msg').textContent = 'Fresh server setting is ' + value + '/day (changed since this save).';
+      pending[target] = null;
+    }
+    settings[target] = value;
   }
 }
+function renderStatus() {
+  const g = statusData?.github || {}, updated = timestamp(statusData?.updatedAt), last = timestamp(g.lastRunAt);
+  const stale = statusFailed || updated === null || Date.now() - updated > 90 * 60000;
+  const recentRun = last !== null && Date.now() - last < 90 * 60000 && count(g.checksToday) !== null;
+  const failures = count(g.failedToday);
+  $('gh-dot').className = 'dot' + (stale || !recentRun ? ' warn' : failures === null ? '' : failures > 0 ? ' warn' : ' ok');
+  $('gh-stats').textContent = (stale ? 'Stale/unavailable snapshot. ' : 'Published snapshot. ') + 'GitHub UTC day of snapshot: ' + fmt(count(g.checksToday)) + ' passed, ' + fmt(failures) + ' failed; ' + fmt(count(g.runsToday)) + ' runs. Last run: ' + when(g.lastRunAt) + '. Updated: ' + when(statusData?.updatedAt) + '.';
+  const sameDay = updated !== null && (g.day || new Date(updated).toISOString().slice(0,10)) === new Date().toISOString().slice(0,10);
+  $('today').textContent = !stale && sameDay && g.countsComplete !== false ? fmt(count(g.checksToday)) : 'unknown (stale snapshot)';
+  for (const target of ['github','imac']) if (!authoritative[target] && !pending[target]) settings[target] = rate(statusData?.[target]?.dailyTotal);
+}
+async function fetchLive() {
+  const j = await request('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());
+  if (count(j?.downloadCount) === null) throw new Error('invalid registry count');
+  const meta = {at:new Date().toISOString(), downloadCount:j.downloadCount, version:typeof j.version === 'string' ? j.version.slice(0,100) : null,
+    reviewCount:count(j.reviewCount), averageRating:typeof j.averageRating === 'number' && Number.isFinite(j.averageRating) && j.averageRating >= 0 && j.averageRating <= 5 ? j.averageRating : null};
+  liveMeta = meta; storage.set(META_KEY, JSON.stringify(meta)); addLivePoint({...point(meta), live:true});
+}
+function renderCount() {
+  const published = point({at:statusData?.updatedAt, downloadCount:statusData?.openvsx?.downloadCount});
+  const useLive = liveMeta && (!published || timestamp(liveMeta.at) >= timestamp(published.at));
+  const src = useLive ? liveMeta : published;
+  $('dl').textContent = src ? fmt(src.downloadCount) : 'unknown';
+  const version = useLive ? liveMeta.version : statusData?.openvsx?.version;
+  $('ver').textContent = typeof version === 'string' ? 'v' + version.slice(0,100) : 'unknown version';
+  $('stamp').textContent = (liveFailed ? 'Live refresh failed. ' : '') + (!src ? 'No valid reading available.' : (liveFailed ? 'Cached reading' : useLive ? 'Registry observed' : 'Published reading') + ': ' + when(src.at));
+  $('extra').textContent = useLive && count(liveMeta.reviewCount) !== null ? fmt(liveMeta.reviewCount) + ' reviews' : '';
+}
+let chartPoints = [], barPoints = [];
+function hideTip() { $('tip').style.display = 'none'; $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); }
+function showTip(text, x, y) {
+  const tip = $('tip'); tip.textContent = text; tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(x + 10, innerWidth - r.width - 8)) + 'px';
+  tip.style.top = Math.max(8, Math.min(y - r.height - 10, innerHeight - r.height - 8)) + 'px';
+}
+function attachChart(id, getPoints) {
+  const svg = $(id); let index = 0;
+  svg.setAttribute('tabindex','0'); svg.setAttribute('role','img');
+  svg.setAttribute('aria-label', id === 'chart' ? 'Counter observations. Use left and right arrows to inspect readings.' : 'Observed changes by UTC capture hour. Missing hours are unknown. Use left and right arrows.');
+  svg.setAttribute('aria-describedby','tip');
+  function show(i, x, y) { const ps = getPoints(); if (!ps.length) { hideTip(); return; } index = Math.max(0,Math.min(i,ps.length-1)); const p = ps[index], r = svg.getBoundingClientRect(); if (id === 'chart') { $('guide')?.setAttribute('x1',p.x); $('guide')?.setAttribute('x2',p.x); $('guide')?.setAttribute('opacity','1'); $('marker')?.setAttribute('cx',p.x); $('marker')?.setAttribute('cy',p.y); $('marker')?.setAttribute('opacity','1'); } else { $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); } showTip(p.label, x ?? r.left + p.x / 800 * r.width, y ?? r.top + r.height / 2); }
+  svg.addEventListener('pointermove', e => { const ps = getPoints(), r = svg.getBoundingClientRect(); if (!ps.length || !r.width) return; const x = (e.clientX-r.left)/r.width*800; let best=0; ps.forEach((p,i) => { if (Math.abs(p.x-x)<Math.abs(ps[best].x-x)) best=i; }); show(best,e.clientX,e.clientY); });
+  svg.addEventListener('pointerleave',hideTip); svg.addEventListener('blur',hideTip); svg.addEventListener('focus',()=>show(index));
+  svg.addEventListener('keydown',e=>{ if (!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key)) return; e.preventDefault(); if(e.key==='Escape') hideTip(); else show(e.key==='Home'?0:e.key==='End'?getPoints().length-1:index+(e.key==='ArrowLeft'?-1:1)); });
+}
+function drawHistory(pts) {
+  chartPoints = []; barPoints = []; hideTip(); $('win').replaceChildren(); $('bars').replaceChildren();
+  $('chart-note').textContent = (historyFailed ? 'History refresh failed; showing cached/local observations. ' : '') + pts.length + ' readings.' + (invalidHistoryRows ? ' ' + invalidHistoryRows + ' invalid rows skipped.' : '') + ' Bar changes belong to the later capture hour, not necessarily the hour of download. Gaps over 90 minutes are marked unknown.';
+  if (!pts.length) { $('chart').innerHTML = '<text x="10" y="30" fill="var(--dim)">No valid observations</text>'; return; }
+  const xs=pts.map(p=>timestamp(p.at)), ys=pts.map(p=>p.downloadCount);
+  const x0=xs[0], x1=xs.at(-1); let y0=ys[0], y1=ys[0]; for(const n of ys) { y0=Math.min(y0,n); y1=Math.max(y1,n); }
+  const px=t=>54+(t-x0)/Math.max(1,x1-x0)*736, py=n=>198-(n-y0)/Math.max(1,y1-y0)*180;
+  let line='';
+  pts.forEach((p,i)=>{ const gap=i>0&&xs[i]-xs[i-1]>90*60000; line+=(i&&!gap?' L':' M')+px(xs[i]).toFixed(2)+','+py(ys[i]).toFixed(2); const delta=i?ys[i]-ys[i-1]:null; chartPoints.push({x:px(xs[i]), y:py(ys[i]), label:fmt(ys[i])+' downloads; '+when(p.at)+(delta===null?'':'; '+(delta>=0?'+':'')+delta+' since '+when(pts[i-1].at))+(p.approx?'; approximate':'')}); });
+  $('chart').innerHTML = [y0,Math.round(y0+(y1-y0)/2),y1].map(n=>'<text x="46" y="'+(py(n)+4)+'" text-anchor="end" fill="var(--dim)" font-size="11">'+fmt(n)+'</text>').join('') + '<path d="'+line+'" fill="none" stroke="var(--accent)" stroke-width="2"/>' + pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="'+(p.approx?3:2)+'" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join('');
+  $('chart').innerHTML += '<text x="54" y="215" fill="var(--dim)" font-size="10">' + when(pts[0].at) + '</text><text x="790" y="215" text-anchor="end" fill="var(--dim)" font-size="10">' + when(pts.at(-1).at) + '</text>';
+  $('chart').innerHTML += '<line id="guide" y1="12" y2="198" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="marker" r="4.5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>';
+  for (const [label,hours] of [['1 h',1],['6 h',6],['24 h',24]]) {
+    const cutoff=x1-hours*3600000; let base=-1; for(let i=0;i<xs.length;i++) if(xs[i]<=cutoff) base=i;
+    const el=document.createElement('div'); el.className='win'; const strong=document.createElement('b');
+    strong.textContent=base<0?'unknown':fmt(ys.at(-1)-ys[base]); el.append(strong,document.createTextNode(label+' before latest reading'+(base<0?' (insufficient history)':' (nearest earlier sample)'))); $('win').append(el);
+  }
+  const buckets=new Map();
+  for(let i=1;i<pts.length;i++) { const hour=Math.floor(xs[i]/3600000)*3600000; const b=buckets.get(hour)||{count:0,gap:false}; b.count+=ys[i]-ys[i-1]; b.gap ||= xs[i]-xs[i-1]>90*60000; buckets.set(hour,b); }
+  const end=Math.floor(x1/3600000)*3600000, start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000), per=[];
+  for(let hour=start;hour<=end;hour+=3600000) per.push({hour,...(buckets.get(hour)||{count:null,gap:false})});
+  const max=Math.max(1,...per.map(b=>Math.abs(b.count||0))), bw=736/per.length, zero=50;
+  $('bars').innerHTML='<line x1="54" x2="790" y1="50" y2="50" stroke="var(--line)"/>'+per.map((b,i)=>{ const x=54+i*bw,h=b.count===null?0:Math.abs(b.count)/max*40; barPoints.push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+' capture hour: '+(b.count===null?'unknown (no interval ending in this hour)':(b.count>=0?'+':'')+b.count+' observed counter change'+(b.gap?'; spans a missing-data gap, hourly activity unknown':''))}); return b.count===null?'<text x="'+(x+bw/2)+'" y="54" text-anchor="middle" fill="var(--dim)" font-size="10">?</text>':'<rect x="'+(x+1)+'" y="'+(b.count>=0?zero-h:zero)+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,h)+'" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'"/>'; }).join('');
+}
+function drawProjection(pts) {
+  $('proj').replaceChildren(); $('proj-basis').textContent='Not enough history for a trend.';
+  $('proj-note').textContent='Illustrative linear scenario, not a forecast or guarantee. Configured checks do not establish completed downloads or monitoring’s share of the counter. Registry corrections can decrease the count.';
+  if(pts.length<2) return;
+  const last=pts.at(-1), end=timestamp(last.at), cutoff=end-7*86400000;
+  const base=[...pts].reverse().find(p=>timestamp(p.at)<=cutoff)||pts[0], days=(end-timestamp(base.at))/86400000;
+  if(days<0.25) return;
+  const daily=(last.downloadCount-base.downloadCount)/days;
+  $('proj-basis').textContent=(historyFailed||liveFailed?'Cached-data scenario. ':'')+'Observed net change: '+Math.round(daily).toLocaleString()+'/day over '+days.toFixed(1)+' days, ending '+when(last.at)+'.';
+  const targets = [['Nov 1, 2026',Date.UTC(2026,10,1)],['Jan 1, 2027',Date.UTC(2027,0,1)]].filter(([,t]) => t > Date.now());
+  if (!targets.length) targets.push(['In 30 days',Date.now()+30*86400000],['In 90 days',Date.now()+90*86400000]);
+  for(const [label,target] of targets) {
+    const daysAhead=(target-end)/86400000;
+    const estimate=Math.round(last.downloadCount+daily*daysAhead), tr=document.createElement('tr'), lab=document.createElement('td'), val=document.createElement('td'); lab.className='lab'; val.className='val'; lab.textContent=label+' (UTC)'; val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful'; tr.append(lab,val); $('proj').append(tr);
+  }
+}
+async function refreshLive() {
+  if (refreshing) return refreshing;
+  const btn=$('refresh'); btn.disabled=true; btn.classList.add('busy'); btn.textContent='Refreshing…';
+  const readRevision=revision;
+  refreshing=(async()=>{
+    // All reads start once, independently. One service failing never skips another.
+    const result=await Promise.allSettled([
+      request(RAW('status.json')).then(j=>{ if(!j||timestamp(j.updatedAt)===null||!j.github||typeof j.github!=='object') throw new Error('invalid status'); statusData=j; }),
+      fetchLive(),
+      request(RAW('downloads.jsonl'),{},'text').then(text=>{ const rows=text.split('\n').filter(l=>l.trim()); const valid=points(rows.map(l=>{try{return JSON.parse(l);}catch{return null;}})); if(rows.length&&!valid.length) throw new Error('invalid history'); invalidHistoryRows=rows.length-valid.length; branchPoints=valid; }),
+      request(API).then(j=>applySettings(j,readRevision))
+    ]);
+    statusFailed=result[0].status==='rejected'; liveFailed=result[1].status==='rejected'; historyFailed=result[2].status==='rejected';
+    if(result[3].status==='rejected') serverWritable=false;
+    renderStatus(); renderSettings(); refreshTokenUi(); renderCount();
+    const seen=new Set(), merged=[...branchPoints,...livePoints()].sort((a,b)=>timestamp(a.at)-timestamp(b.at)).filter(p=>{const key=p.at+':'+p.downloadCount; if(seen.has(key))return false; seen.add(key); return true;});
+    drawHistory(merged); drawProjection(merged);
+  })().catch(()=>{ $('stamp').textContent='Dashboard rendering failed. Refresh to retry.'; }).finally(()=>{ refreshing=null; btn.disabled=false; btn.classList.remove('busy'); btn.textContent='Refresh now'; });
+  return refreshing;
+}
+const tip=document.createElement('div'); tip.id='tip'; tip.className='tip'; tip.setAttribute('role','status'); tip.setAttribute('aria-live','polite'); document.body.append(tip);
+for(const target of ['github','imac']) $(prefix(target)+'-total').addEventListener('input',()=>{dirty[target]=true;});
+attachChart('chart',()=>chartPoints); attachChart('bars',()=>barPoints);
+refreshTokenUi(); refreshLive();
+setInterval(() => { if (!document.hidden) refreshLive(); },120000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshLive(); });
 
-refreshTokenUi();
-detectServer();
-load();
-setInterval(load, 120000);
 </script>
 </body>
 </html>

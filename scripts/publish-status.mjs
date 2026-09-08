@@ -8,7 +8,7 @@ const API = 'https://api.github.com';
 const headers = { Authorization: `Bearer ${TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
 
 const gh = async (path, init = {}) => {
-  const res = await fetch(`${API}${path}`, { ...init, headers: { ...headers, ...(init.headers || {}) } });
+  const res = await fetch(`${API}${path}`, { ...init, signal: AbortSignal.timeout(15000), headers: { ...headers, ...(init.headers || {}) } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`${path} -> ${res.status} ${(await res.text()).slice(0, 200)}`);
   return res.json();
@@ -17,33 +17,46 @@ const gh = async (path, init = {}) => {
 // --- 1. current published release + public download count -------------------------------------
 let openvsx = { version: null, downloadCount: null };
 try {
-  const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr', { headers: { 'Cache-Control': 'no-cache' } });
-  if (r.ok) { const j = await r.json(); openvsx = { version: j.version, downloadCount: j.downloadCount }; }
+  const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr', { signal: AbortSignal.timeout(15000), headers: { 'Cache-Control': 'no-cache' } });
+  if (r.ok) { const j = await r.json(); if (Number.isSafeInteger(j.downloadCount) && j.downloadCount >= 0) openvsx = { version: typeof j.version === 'string' ? j.version : null, downloadCount: j.downloadCount }; }
 } catch {}
 
 // --- 2. today's checks on this repo ------------------------------------------------------------
 const today = new Date().toISOString().slice(0, 10);
-let checksToday = 0, failedToday = 0, lastRunAt = null, runsToday = 0;
+let checksToday = 0, failedToday = 0, lastRunAt = null, runsToday = 0, countsComplete = true;
 try {
-  const runs = await gh(`/repos/${REPO}/actions/workflows/daily-health-qa.yml/runs?per_page=30`);
-  const todays = (runs?.workflow_runs || []).filter((r) => r.created_at >= `${today}T00:00:00Z`);
+  const todays = [];
+  for (let page = 1; ; page++) {
+    const result = await gh(`/repos/${REPO}/actions/workflows/daily-health-qa.yml/runs?per_page=100&page=${page}`);
+    if (!result || !Array.isArray(result.workflow_runs)) throw new Error('runs unavailable');
+    const batch = result.workflow_runs;
+    todays.push(...batch.filter(r => r.created_at >= today + 'T00:00:00Z'));
+    if (batch.length < 100 || batch.some(r => r.created_at < today + 'T00:00:00Z')) break;
+  }
   runsToday = todays.length;
   lastRunAt = todays[0]?.created_at || null;
-  for (const run of todays.slice(0, 12)) {
-    const jobs = await gh(`/repos/${REPO}/actions/runs/${run.id}/jobs?per_page=100`);
-    for (const job of jobs?.jobs || []) {
-      if (!job.name.startsWith('Clean install')) continue;
-      if (job.conclusion === 'success') checksToday++;
-      else if (job.conclusion === 'failure') failedToday++;
+  for (const run of todays) {
+    for (let page = 1; ; page++) {
+      const result = await gh(`/repos/${REPO}/actions/runs/${run.id}/jobs?per_page=100&page=${page}`);
+      if (!result || !Array.isArray(result.jobs)) throw new Error('jobs unavailable');
+      for (const job of result.jobs) {
+        if (!job.name.startsWith('Clean install')) continue;
+        if (job.conclusion === 'success') checksToday++;
+        else if (['failure', 'timed_out', 'cancelled', 'action_required'].includes(job.conclusion)) failedToday++;
+      }
+      if (result.jobs.length < 100) break;
     }
   }
-} catch (e) { console.log('check count failed:', e.message); }
+} catch (e) {
+  countsComplete = false; checksToday = null; failedToday = null;
+  console.log('check count failed:', e.message);
+}
 
 // --- 3. configured daily totals ----------------------------------------------------------------
 let githubTotal = null, imacTotal = null;
 githubTotal = Number(process.env.GITHUB_DAILY_TOTAL) || null;
 try {
-  const r = await fetch(`https://raw.githubusercontent.com/${REPO}/main/monitor-config.json?t=${Date.now()}`);
+  const r = await fetch(`https://raw.githubusercontent.com/${REPO}/main/monitor-config.json?t=${Date.now()}`, { signal: AbortSignal.timeout(15000) });
   if (r.ok) imacTotal = Number((await r.json()).imacDailyTotal) || null;
 } catch {}
 
@@ -67,7 +80,8 @@ const putFile = async (p, text, sha, message) =>
 const now = new Date().toISOString();
 const hist = await getFile('downloads.jsonl');
 const lines = hist.text.split('\n').filter(Boolean);
-const last = lines.length ? JSON.parse(lines.at(-1)) : null;
+let last = null;
+try { last = lines.length ? JSON.parse(lines.at(-1)) : null; } catch {}
 if (openvsx.downloadCount != null && (!last || last.downloadCount !== openvsx.downloadCount || Date.parse(now) - Date.parse(last.at) > 3600000)) {
   lines.push(JSON.stringify({ at: now, downloadCount: openvsx.downloadCount, version: openvsx.version, source: 'github-actions' }));
 }
@@ -80,7 +94,7 @@ const status = await getFile('status.json');
 await putFile('status.json', JSON.stringify({
   updatedAt: now,
   openvsx,
-  github: { dailyTotal: githubTotal, checksToday, failedToday, runsToday, lastRunAt },
+  github: { dailyTotal: githubTotal, checksToday, failedToday, runsToday, lastRunAt, countsComplete, day: today },
   imac: { dailyTotal: imacTotal },
 }, null, 2) + '\n', status.sha, `status [skip ci]`);
 
