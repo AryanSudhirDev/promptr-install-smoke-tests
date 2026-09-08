@@ -161,7 +161,7 @@
         <button class="secondary" onclick="clearToken()">Clear</button>
       </div>
       <div class="msg" id="tok-msg"></div>
-      <div class="hint">
+      <div class="hint" id="tok-hint">
         Viewing needs nothing. To change the numbers, create a fine-grained token on
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com</a>
         limited to <code>promptr-install-smoke-tests</code> with <b>Variables: read and write</b> and
@@ -183,9 +183,26 @@ const RAW = (branch, file) => `https://raw.githubusercontent.com/${REPO}/${branc
 const $ = (id) => document.getElementById(id);
 const tok = () => localStorage.getItem('promptr_qa_token') || '';
 
+// Two ways to save, chosen automatically:
+//  - On the Vercel deployment: POST /api/settings with a short dashboard key. The GitHub token
+//    stays in Vercel's env, never in this browser.
+//  - Anywhere else (GitHub Pages, local file): call api.github.com directly with a token you paste.
+const KEY_STORE = 'promptr_qa_dash_key';
+const dashKey = () => localStorage.getItem(KEY_STORE) || '';
+let serverWritable = null; // null = unknown yet
+
+async function detectServer() {
+  try {
+    const r = await fetch('/api/settings', { method: 'GET' });
+    if (!r.ok) { serverWritable = false; return; }
+    serverWritable = Boolean((await r.json()).writable);
+  } catch { serverWritable = false; }
+  refreshTokenUi();
+}
+
 function saveToken() {
   const v = $('token').value.trim();
-  if (v) localStorage.setItem('promptr_qa_token', v);
+  if (v) localStorage.setItem(serverWritable ? KEY_STORE : 'promptr_qa_token', v);
   $('token').value = '';
   $('tok-msg').className = 'msg ok';
   $('tok-msg').textContent = v ? 'saved in this browser \u2014 the Save buttons are live now' : 'nothing entered';
@@ -194,38 +211,41 @@ function saveToken() {
 }
 function clearToken() {
   localStorage.removeItem('promptr_qa_token');
+  localStorage.removeItem(KEY_STORE);
   $('tok-msg').className = 'msg';
   $('tok-msg').textContent = 'cleared';
   refreshTokenUi();
 }
+const canWrite = () => (serverWritable ? !!dashKey() : !!tok());
+
 function refreshTokenUi() {
-  const has = !!tok();
+  const has = canWrite();
+  const label = serverWritable ? 'dashboard key' : 'GitHub token';
   for (const id of ['gh-save', 'im-save']) {
     const b = $(id);
-    b.disabled = false;                      // always clickable, so it can explain itself
+    b.disabled = false;
     b.textContent = has ? 'Save' : 'Save \u2026';
-    b.title = has ? 'Save this number' : 'Needs a GitHub token (click to set one up)';
+    b.title = has ? 'Save this number' : 'Needs a ' + label + ' (click to set one up)';
     b.classList.toggle('secondary', !has);
   }
-  for (const id of ['gh-need', 'im-need']) $(id).textContent = has ? '' : 'read-only \u2014 add a token to change this';
+  for (const id of ['gh-need', 'im-need']) $(id).textContent = has ? '' : 'read-only \u2014 add a ' + label + ' to change this';
   $('tokbox').querySelector('summary').textContent = has
-    ? 'Token saved in this browser (click to change or remove)'
-    : 'Add a token to change the numbers (viewing needs nothing)';
-}
-
-async function ghApi(path, init = {}) {
-  const res = await fetch(`https://api.github.com${path}`, { ...init, headers: {
-    Authorization: `Bearer ${tok()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers || {}) } });
-  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 160)}`);
-  return res.status === 204 ? null : res.json();
+    ? 'Key saved in this browser (click to change or remove)'
+    : 'Add a ' + label + ' to change the numbers (viewing needs nothing)';
+  const hint = $('tok-hint');
+  if (hint) hint.innerHTML = serverWritable
+    ? 'This deployment keeps the GitHub token on the server. Enter the short dashboard key instead; it is stored in this browser only and grants nothing beyond changing these two numbers.'
+    : 'Viewing needs nothing. To change the numbers, create a fine-grained token on <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com</a> limited to <code>promptr-install-smoke-tests</code> with <b>Variables: read and write</b> and <b>Contents: read and write</b>. It is kept in this browser\u2019s localStorage only, sent only to api.github.com, and never stored in the repo.';
+  const ph = $('token');
+  if (ph) ph.placeholder = serverWritable ? 'dashboard key (stored only in this browser)' : 'github_pat_\u2026 (stored only in this browser)';
 }
 
 async function save(target) {
   const input = target === 'github' ? $('gh-total') : $('im-total');
   const msg = target === 'github' ? $('gh-msg') : $('im-msg');
-  if (!tok()) {
+  if (!canWrite()) {
     msg.className = 'msg bad';
-    msg.textContent = 'a GitHub token is needed to save \u2014 opening the token box below';
+    msg.textContent = 'a ' + (serverWritable ? 'dashboard key' : 'GitHub token') + ' is needed to save \u2014 opening the box below';
     $('tokbox').open = true;
     $('tokbox').scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(() => $('token').focus(), 400);
@@ -233,23 +253,30 @@ async function save(target) {
   }
   const n = Math.round(Number(input.value));
   if (!Number.isFinite(n) || n < 1 || n > 1000) { msg.className = 'msg bad'; msg.textContent = 'enter 1-1000'; return; }
-  msg.className = 'msg'; msg.textContent = 'saving…';
+  msg.className = 'msg'; msg.textContent = 'saving\u2026';
   try {
-    if (target === 'github') {
-      await ghApi(`/repos/${REPO}/actions/variables/MONITOR_CHECKS_PER_DAY`, {
+    if (serverWritable) {
+      const r = await fetch('/api/settings', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dash-key': dashKey() },
+        body: JSON.stringify({ target, total: n }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    } else if (target === 'github') {
+      await ghApi('/repos/' + REPO + '/actions/variables/MONITOR_CHECKS_PER_DAY', {
         method: 'PATCH', body: JSON.stringify({ name: 'MONITOR_CHECKS_PER_DAY', value: String(n) }) });
     } else {
-      const cur = await ghApi(`/repos/${REPO}/contents/monitor-config.json`);
+      const cur = await ghApi('/repos/' + REPO + '/contents/monitor-config.json');
       const body = JSON.stringify({ imacDailyTotal: n, note: 'Set from the hosted dashboard. The iMac monitor reads this each run; local config.json is the fallback.' }, null, 2) + '\n';
-      await ghApi(`/repos/${REPO}/contents/monitor-config.json`, { method: 'PUT', body: JSON.stringify({
-        message: `Set iMac checks per day to ${n} [skip ci]`, content: btoa(body), sha: cur.sha }) });
+      await ghApi('/repos/' + REPO + '/contents/monitor-config.json', { method: 'PUT', body: JSON.stringify({
+        message: 'Set iMac checks per day to ' + n + ' [skip ci]', content: btoa(body), sha: cur.sha }) });
     }
     msg.className = 'msg ok';
-    msg.textContent = `saved: ${n}/day, applies at the next slot`;
+    msg.textContent = 'saved: ' + n + '/day, applies at the next slot';
   } catch (e) {
     msg.className = 'msg bad';
-    msg.textContent = String(e.message).includes('403') || String(e.message).includes('401')
-      ? 'token rejected: needs Variables + Contents read/write on this repo' : String(e.message);
+    const t = String(e.message);
+    msg.textContent = /401|wrong or missing/.test(t) ? 'key rejected \u2014 check the dashboard key'
+      : /403/.test(t) ? 'token rejected: needs Variables + Contents read/write on this repo' : t.slice(0, 140);
   }
 }
 
@@ -453,6 +480,7 @@ async function refreshLive() {
 }
 
 refreshTokenUi();
+detectServer();
 load();
 setInterval(load, 120000);
 </script>
