@@ -84,6 +84,12 @@
   .hint { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.55; }
   code { background:var(--bg); padding:1px 5px; border-radius:5px; font-size:12px; }
   .foot { color:var(--dim); font-size:12px; margin-top:var(--gap); }
+  .tip { position:fixed; z-index:50; display:none; pointer-events:none; background:var(--card); color:var(--text);
+         border:1px solid var(--line); border-radius:10px; padding:8px 11px; font-size:13px; line-height:1.45;
+         box-shadow:0 8px 28px rgba(0,0,0,.35); max-width:80vw; }
+  .tip .tip-n { font-weight:650; font-variant-numeric:tabular-nums; }
+  .tip .tip-s { color:var(--dim); font-size:12px; }
+  #chart, #bars { touch-action:pan-y; cursor:crosshair; }
   a { color:var(--accent); }
 </style>
 </head>
@@ -283,6 +289,106 @@ async function save(target) {
   }
 }
 
+// Hover / touch readout for the charts: nearest point, its exact count, when it was recorded,
+// and the change since the previous reading.
+let chartPoints = [];   // [{vx, vy, p}] in viewBox units
+let barPoints = [];     // [{vx0, vx1, hour, count}]
+
+function tipEl() {
+  let t = document.getElementById('tip');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'tip';
+    t.className = 'tip';
+    document.body.appendChild(t);
+  }
+  return t;
+}
+
+function hideTip() {
+  tipEl().style.display = 'none';
+  const g = document.getElementById('guide');
+  if (g) g.setAttribute('opacity', '0');
+  const m = document.getElementById('marker');
+  if (m) m.setAttribute('opacity', '0');
+}
+
+function showTip(html, clientX, clientY) {
+  const t = tipEl();
+  t.innerHTML = html;
+  t.style.display = 'block';
+  const r = t.getBoundingClientRect();
+  let x = clientX + 14, y = clientY - r.height - 12;
+  if (x + r.width > window.innerWidth - 8) x = clientX - r.width - 14;
+  if (y < 8) y = clientY + 18;
+  t.style.left = Math.max(8, x) + 'px';
+  t.style.top = y + 'px';
+}
+
+const fmtWhen = (iso) => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+function attachChartHover() {
+  const svg = document.getElementById('chart');
+  if (!svg || svg.dataset.hover === '1') return;
+  svg.dataset.hover = '1';
+  const handle = (ev) => {
+    if (!chartPoints.length) return;
+    const touch = ev.touches && ev.touches[0];
+    const clientX = touch ? touch.clientX : ev.clientX;
+    const clientY = touch ? touch.clientY : ev.clientY;
+    const rect = svg.getBoundingClientRect();
+    const vx = ((clientX - rect.left) / rect.width) * 800;   // viewBox is 0..800 wide
+    let best = chartPoints[0], bestD = Infinity;
+    for (const c of chartPoints) { const d = Math.abs(c.vx - vx); if (d < bestD) { bestD = d; best = c; } }
+    const idx = chartPoints.indexOf(best);
+    const prev = idx > 0 ? chartPoints[idx - 1] : null;
+    const delta = prev ? best.p.downloadCount - prev.p.downloadCount : null;
+    const mins = prev ? Math.round((new Date(best.p.at) - new Date(prev.p.at)) / 60000) : null;
+    const guide = document.getElementById('guide');
+    const marker = document.getElementById('marker');
+    if (guide) { guide.setAttribute('x1', best.vx); guide.setAttribute('x2', best.vx); guide.setAttribute('opacity', '1'); }
+    if (marker) { marker.setAttribute('cx', best.vx); marker.setAttribute('cy', best.vy); marker.setAttribute('opacity', '1'); }
+    const rows = [
+      '<div class="tip-n">' + best.p.downloadCount.toLocaleString() + ' downloads</div>',
+      '<div class="tip-s">' + fmtWhen(best.p.at) + '</div>',
+    ];
+    if (delta != null) rows.push('<div class="tip-s">' + (delta >= 0 ? '+' : '') + delta + ' since previous reading' + (mins != null ? ' (' + (mins >= 60 ? Math.round(mins / 60) + ' h' : mins + ' min') + ' earlier)' : '') + '</div>');
+    if (best.p.approx) rows.push('<div class="tip-s">approximate reading</div>');
+    if (best.p.live) rows.push('<div class="tip-s">manual refresh</div>');
+    showTip(rows.join(''), clientX, clientY);
+    if (touch) ev.preventDefault();
+  };
+  svg.addEventListener('mousemove', handle);
+  svg.addEventListener('touchstart', handle, { passive: false });
+  svg.addEventListener('touchmove', handle, { passive: false });
+  svg.addEventListener('mouseleave', hideTip);
+  svg.addEventListener('touchend', hideTip);
+}
+
+function attachBarsHover() {
+  const svg = document.getElementById('bars');
+  if (!svg || svg.dataset.hover === '1') return;
+  svg.dataset.hover = '1';
+  const handle = (ev) => {
+    if (!barPoints.length) return;
+    const touch = ev.touches && ev.touches[0];
+    const clientX = touch ? touch.clientX : ev.clientX;
+    const clientY = touch ? touch.clientY : ev.clientY;
+    const rect = svg.getBoundingClientRect();
+    const vx = ((clientX - rect.left) / rect.width) * 800;
+    const hit = barPoints.find((b) => vx >= b.vx0 && vx <= b.vx1) || null;
+    if (!hit) { hideTip(); return; }
+    showTip('<div class="tip-n">' + hit.count + ' download' + (hit.count === 1 ? '' : 's') + '</div><div class="tip-s">' +
+      new Date(hit.hour).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' }) + ' \u2013 next hour</div>', clientX, clientY);
+    if (touch) ev.preventDefault();
+  };
+  svg.addEventListener('mousemove', handle);
+  svg.addEventListener('touchstart', handle, { passive: false });
+  svg.addEventListener('touchmove', handle, { passive: false });
+  svg.addEventListener('mouseleave', hideTip);
+  svg.addEventListener('touchend', hideTip);
+}
+
 function drawHistory(pts) {
   const svg = $('chart');
   if (pts.length < 2) { svg.innerHTML = '<text x="10" y="30" fill="#98a0b3" font-size="13">collecting data…</text>'; return; }
@@ -305,11 +411,15 @@ function drawHistory(pts) {
   const py = (v) => H - pad.b - ((v - y0) / Math.max(1, y1 - y0)) * (H - pad.t - pad.b);
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${px(at(p)).toFixed(1)},${py(p.downloadCount).toFixed(1)}`).join(' ');
   const ticks = [y0, Math.round((y0 + y1) / 2), y1];
+  chartPoints = pts.map((p) => ({ vx: px(at(p)), vy: py(p.downloadCount), p }));
   svg.innerHTML = ticks.map((v) => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${py(v)}" y2="${py(v)}" stroke="var(--line)"/><text x="${pad.l - 8}" y="${py(v) + 4}" text-anchor="end" fill="var(--dim)" font-size="11">${v.toLocaleString()}</text>`).join('')
     + `<path d="${line} L${px(x1).toFixed(1)},${H - pad.b} L${px(x0).toFixed(1)},${H - pad.b} Z" fill="var(--accent)" opacity="0.13"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/>`
     + pts.map((p) => `<circle cx="${px(at(p)).toFixed(1)}" cy="${py(p.downloadCount).toFixed(1)}" r="${p.approx ? 3 : 2}" fill="${p.approx ? 'var(--dim)' : 'var(--accent)'}"><title>${new Date(p.at).toLocaleString()}: ${p.downloadCount.toLocaleString()}</title></circle>`).join('')
     + `<text x="${pad.l}" y="${H - 6}" fill="var(--dim)" font-size="11">${new Date(x0).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' })}</text>`
-    + `<text x="${W - pad.r}" y="${H - 6}" text-anchor="end" fill="var(--dim)" font-size="11">${new Date(x1).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' })}</text>`;
+    + `<text x="${W - pad.r}" y="${H - 6}" text-anchor="end" fill="var(--dim)" font-size="11">${new Date(x1).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' })}</text>`
+    + `<line id="guide" x1="0" x2="0" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`
+    + `<circle id="marker" r="4.5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>`;
+  attachChartHover();
   $('chart-note').textContent = `${pts.length} readings${pts.some((p) => p.approx) ? ' · grey points are approximate' : ''}`;
 
   const buckets = new Map();
@@ -322,9 +432,11 @@ function drawHistory(pts) {
   if (!per.length) { bars.innerHTML = ''; return; }
   const BW = 800, BH = 110, bp = { l: 54, r: 10, t: 8, b: 20 };
   const max = Math.max(...per.map((b) => b.count), 1), bw = (BW - bp.l - bp.r) / per.length;
+  barPoints = per.map((b, i) => ({ vx0: bp.l + i * bw, vx1: bp.l + (i + 1) * bw, hour: b.hour, count: b.count }));
   bars.innerHTML = `<line x1="${bp.l}" x2="${BW - bp.r}" y1="${BH - bp.b}" y2="${BH - bp.b}" stroke="var(--line)"/><text x="${bp.l - 8}" y="${bp.t + 10}" text-anchor="end" fill="var(--dim)" font-size="11">${max}</text>`
     + per.map((b, i) => { const h = (b.count / max) * (BH - bp.t - bp.b);
         return `<rect x="${(bp.l + i * bw + 1).toFixed(1)}" y="${(BH - bp.b - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" fill="var(--accent)" opacity="0.75"><title>${new Date(b.hour).toLocaleString()}: ${b.count}</title></rect>`; }).join('');
+  attachBarsHover();
 }
 
 // Projected totals at fixed dates, from the observed rate and, separately, from the planned
