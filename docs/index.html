@@ -106,6 +106,7 @@
         <button id="gh-save" onclick="save('github')">Save</button>
       </div>
       <div class="msg" id="gh-msg"></div>
+      <div class="where" id="gh-need" style="margin:0"></div>
       <div class="stats" id="gh-stats">loading…</div>
     </div>
 
@@ -118,6 +119,7 @@
         <button id="im-save" onclick="save('imac')">Save</button>
       </div>
       <div class="msg" id="im-msg"></div>
+      <div class="where" id="im-need" style="margin:0"></div>
       <div class="stats" id="im-stats">reads its setting from the repo each run</div>
     </div>
 
@@ -186,8 +188,9 @@ function saveToken() {
   if (v) localStorage.setItem('promptr_qa_token', v);
   $('token').value = '';
   $('tok-msg').className = 'msg ok';
-  $('tok-msg').textContent = v ? 'saved in this browser' : 'nothing entered';
+  $('tok-msg').textContent = v ? 'saved in this browser \u2014 the Save buttons are live now' : 'nothing entered';
   refreshTokenUi();
+  if (v) $('tokbox').open = false;
 }
 function clearToken() {
   localStorage.removeItem('promptr_qa_token');
@@ -197,11 +200,17 @@ function clearToken() {
 }
 function refreshTokenUi() {
   const has = !!tok();
-  $('gh-save').disabled = !has;
-  $('im-save').disabled = !has;
+  for (const id of ['gh-save', 'im-save']) {
+    const b = $(id);
+    b.disabled = false;                      // always clickable, so it can explain itself
+    b.textContent = has ? 'Save' : 'Save \u2026';
+    b.title = has ? 'Save this number' : 'Needs a GitHub token (click to set one up)';
+    b.classList.toggle('secondary', !has);
+  }
+  for (const id of ['gh-need', 'im-need']) $(id).textContent = has ? '' : 'read-only \u2014 add a token to change this';
   $('tokbox').querySelector('summary').textContent = has
-    ? 'Token saved in this browser (click to change)'
-    : 'Token (needed only to change the numbers)';
+    ? 'Token saved in this browser (click to change or remove)'
+    : 'Add a token to change the numbers (viewing needs nothing)';
 }
 
 async function ghApi(path, init = {}) {
@@ -214,6 +223,14 @@ async function ghApi(path, init = {}) {
 async function save(target) {
   const input = target === 'github' ? $('gh-total') : $('im-total');
   const msg = target === 'github' ? $('gh-msg') : $('im-msg');
+  if (!tok()) {
+    msg.className = 'msg bad';
+    msg.textContent = 'a GitHub token is needed to save \u2014 opening the token box below';
+    $('tokbox').open = true;
+    $('tokbox').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => $('token').focus(), 400);
+    return;
+  }
   const n = Math.round(Number(input.value));
   if (!Number.isFinite(n) || n < 1 || n > 1000) { msg.className = 'msg bad'; msg.textContent = 'enter 1-1000'; return; }
   msg.className = 'msg'; msg.textContent = 'saving…';
