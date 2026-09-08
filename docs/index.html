@@ -325,7 +325,9 @@ async function refreshLive() {
   const btn = $('refresh');
   btn.disabled = true; btn.classList.add('busy'); btn.textContent = 'Refreshing…';
   try {
-    const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now(), { headers: { 'Cache-Control': 'no-cache' } });
+    // No custom headers: Open VSX's CORS policy does not allow a Cache-Control request header
+    // (it would trigger a preflight that fails). The cb= query param defeats caching on its own.
+    const r = await fetch('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());
     const j = await r.json();
     if (typeof j.downloadCount === 'number') {
       addLivePoint({ at: new Date().toISOString(), downloadCount: j.downloadCount, version: j.version, live: true });
