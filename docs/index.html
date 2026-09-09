@@ -63,12 +63,12 @@
   .livedot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ok); margin-right:5px; vertical-align:middle; }
 
   .winrow { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin:10px 0 4px; }
-  .win { font-size:12px; color:var(--dim); }
+  .win { padding:10px 12px; border-radius:10px; background:var(--bg); font-size:12px; color:var(--dim); }
   .win b { display:block; font-size:clamp(16px, 1.6vw, 20px); color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
 
   svg { display:block; width:100%; }
-  #chart { height:clamp(180px, 26vh, 300px); }
-  #bars  { height:clamp(90px, 13vh, 150px); }
+  #chart { height:260px; }
+  #bars  { height:150px; }
 
   #proj { width:100%; border-collapse:collapse; font-size:14px; }
   #proj td { padding:9px 0; border-bottom:1px solid var(--line); }
@@ -86,10 +86,11 @@
   .foot { color:var(--dim); font-size:12px; margin-top:var(--gap); }
   .tip { position:fixed; z-index:50; display:none; pointer-events:none; background:var(--card); color:var(--text);
          border:1px solid var(--line); border-radius:10px; padding:8px 11px; font-size:13px; line-height:1.45;
-         box-shadow:0 8px 28px rgba(0,0,0,.35); max-width:80vw; }
+         box-shadow:0 8px 28px rgba(0,0,0,.35); max-width:min(330px, 85vw); white-space:pre-line; }
   .tip .tip-n { font-weight:650; font-variant-numeric:tabular-nums; }
   .tip .tip-s { color:var(--dim); font-size:12px; }
   #chart, #bars { touch-action:pan-y; cursor:crosshair; }
+  svg:focus-visible { outline:2px solid var(--accent); outline-offset:4px; border-radius:8px; }
   a { color:var(--accent); }
 </style>
 </head>
@@ -142,12 +143,12 @@
 
     <div class="card c-chart">
       <h2>Download progression</h2>
-      <div class="where">Public counter observations. Gaps are not interpolated as measured activity.</div>
+      <div class="where">Pacific time (PDT/PST) · Hover, touch, or use arrow keys to explore.</div>
       <div id="win" class="winrow"></div>
       <svg id="chart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
       <div class="where" id="chart-note" style="margin:6px 0 0"></div>
       <div style="margin-top:12px">
-        <div class="where" style="margin-bottom:4px">Observed counter changes by capture hour (UTC)</div>
+        <div class="where" style="margin-bottom:4px">Hourly observed changes · Pacific time</div>
         <svg id="bars" viewBox="0 0 800 110" preserveAspectRatio="none"></svg>
       </div>
     </div>
@@ -205,7 +206,7 @@ const timestamp = value => {
   const n = Date.parse(value); return Number.isFinite(n) && n <= Date.now() + 60000 ? n : null;
 };
 const fmt = n => n === null ? 'unknown' : n.toLocaleString();
-const when = value => { const t = timestamp(value); return t === null ? 'unknown' : new Date(t).toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'UTC', timeZoneName:'short'}); };
+const when = value => { const t = timestamp(value); return t === null ? 'unknown' : new Date(t).toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Los_Angeles', timeZoneName:'short'}); };
 const point = p => p && timestamp(p.at) !== null && count(p.downloadCount) !== null ? {at:new Date(timestamp(p.at)).toISOString(), downloadCount:p.downloadCount, approx:p.approx === true, live:p.live === true} : null;
 const points = list => Array.isArray(list) ? list.map(point).filter(Boolean) : [];
 const livePoints = () => points(readJSON(LIVE_KEY));
@@ -322,7 +323,8 @@ function renderCount() {
   $('stamp').textContent = (liveFailed ? 'Live refresh failed. ' : '') + (!src ? 'No valid reading available.' : (liveFailed ? 'Cached reading' : useLive ? 'Registry observed' : 'Published reading') + ': ' + when(src.at));
   $('extra').textContent = useLive && count(liveMeta.reviewCount) !== null ? fmt(liveMeta.reviewCount) + ' reviews' : '';
 }
-let chartPoints = [], barPoints = [];
+let chartPoints = [], barPoints = [], drawnPoints = [];
+const chartWidths = {chart:800, bars:800};
 function hideTip() { $('tip').style.display = 'none'; $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); }
 function showTip(text, x, y) {
   const tip = $('tip'); tip.textContent = text; tip.style.display = 'block';
@@ -333,36 +335,60 @@ function showTip(text, x, y) {
 function attachChart(id, getPoints) {
   const svg = $(id); let index = 0;
   svg.setAttribute('tabindex','0'); svg.setAttribute('role','img');
-  svg.setAttribute('aria-label', id === 'chart' ? 'Counter observations. Use left and right arrows to inspect readings.' : 'Observed changes by UTC capture hour. Missing hours are unknown. Use left and right arrows.');
+  svg.setAttribute('aria-label', id === 'chart' ? 'Counter observations. Use left and right arrows to inspect readings.' : 'Observed changes by Pacific capture hour. Missing hours are unknown. Use left and right arrows.');
   svg.setAttribute('aria-describedby','tip');
-  function show(i, x, y) { const ps = getPoints(); if (!ps.length) { hideTip(); return; } index = Math.max(0,Math.min(i,ps.length-1)); const p = ps[index], r = svg.getBoundingClientRect(); if (id === 'chart') { $('guide')?.setAttribute('x1',p.x); $('guide')?.setAttribute('x2',p.x); $('guide')?.setAttribute('opacity','1'); $('marker')?.setAttribute('cx',p.x); $('marker')?.setAttribute('cy',p.y); $('marker')?.setAttribute('opacity','1'); } else { $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); } showTip(p.label, x ?? r.left + p.x / 800 * r.width, y ?? r.top + r.height / 2); }
-  svg.addEventListener('pointermove', e => { const ps = getPoints(), r = svg.getBoundingClientRect(); if (!ps.length || !r.width) return; const x = (e.clientX-r.left)/r.width*800; let best=0; ps.forEach((p,i) => { if (Math.abs(p.x-x)<Math.abs(ps[best].x-x)) best=i; }); show(best,e.clientX,e.clientY); });
+  function show(i, x, y) { const ps = getPoints(); if (!ps.length) { hideTip(); return; } index = Math.max(0,Math.min(i,ps.length-1)); const p = ps[index], r = svg.getBoundingClientRect(); if (id === 'chart') { $('guide')?.setAttribute('x1',p.x); $('guide')?.setAttribute('x2',p.x); $('guide')?.setAttribute('opacity','1'); $('marker')?.setAttribute('cx',p.x); $('marker')?.setAttribute('cy',p.y); $('marker')?.setAttribute('opacity','1'); } else { $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); } showTip(p.label, x ?? r.left + p.x / chartWidths[id] * r.width, y ?? r.top + r.height / 2); }
+  svg.addEventListener('pointermove', e => { const ps = getPoints(), r = svg.getBoundingClientRect(); if (!ps.length || !r.width) return; const x = (e.clientX-r.left)/r.width*chartWidths[id]; let best=0; ps.forEach((p,i) => { if (Math.abs(p.x-x)<Math.abs(ps[best].x-x)) best=i; }); show(best,e.clientX,e.clientY); });
   svg.addEventListener('pointerleave',hideTip); svg.addEventListener('blur',hideTip); svg.addEventListener('focus',()=>show(index));
   svg.addEventListener('keydown',e=>{ if (!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key)) return; e.preventDefault(); if(e.key==='Escape') hideTip(); else show(e.key==='Home'?0:e.key==='End'?getPoints().length-1:index+(e.key==='ArrowLeft'?-1:1)); });
 }
 function drawHistory(pts) {
-  chartPoints = []; barPoints = []; hideTip(); $('win').replaceChildren(); $('bars').replaceChildren();
-  $('chart-note').textContent = (historyFailed ? 'History refresh failed; showing cached/local observations. ' : '') + pts.length + ' readings.' + (invalidHistoryRows ? ' ' + invalidHistoryRows + ' invalid rows skipped.' : '') + ' Bar changes belong to the later capture hour, not necessarily the hour of download. Gaps over 90 minutes are marked unknown.';
-  if (!pts.length) { $('chart').innerHTML = '<text x="10" y="30" fill="var(--dim)">No valid observations</text>'; return; }
-  const xs=pts.map(p=>timestamp(p.at)), ys=pts.map(p=>p.downloadCount);
-  const x0=xs[0], x1=xs.at(-1); let y0=ys[0], y1=ys[0]; for(const n of ys) { y0=Math.min(y0,n); y1=Math.max(y1,n); }
-  const px=t=>54+(t-x0)/Math.max(1,x1-x0)*736, py=n=>198-(n-y0)/Math.max(1,y1-y0)*180;
-  let line='';
-  pts.forEach((p,i)=>{ const gap=i>0&&xs[i]-xs[i-1]>90*60000; line+=(i&&!gap?' L':' M')+px(xs[i]).toFixed(2)+','+py(ys[i]).toFixed(2); const delta=i?ys[i]-ys[i-1]:null; chartPoints.push({x:px(xs[i]), y:py(ys[i]), label:fmt(ys[i])+' downloads; '+when(p.at)+(delta===null?'':'; '+(delta>=0?'+':'')+delta+' since '+when(pts[i-1].at))+(p.approx?'; approximate':'')}); });
-  $('chart').innerHTML = [y0,Math.round(y0+(y1-y0)/2),y1].map(n=>'<text x="46" y="'+(py(n)+4)+'" text-anchor="end" fill="var(--dim)" font-size="11">'+fmt(n)+'</text>').join('') + '<path d="'+line+'" fill="none" stroke="var(--accent)" stroke-width="2"/>' + pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="'+(p.approx?3:2)+'" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join('');
-  $('chart').innerHTML += '<text x="54" y="215" fill="var(--dim)" font-size="10">' + when(pts[0].at) + '</text><text x="790" y="215" text-anchor="end" fill="var(--dim)" font-size="10">' + when(pts.at(-1).at) + '</text>';
-  $('chart').innerHTML += '<line id="guide" y1="12" y2="198" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="marker" r="4.5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>';
-  for (const [label,hours] of [['1 h',1],['6 h',6],['24 h',24]]) {
-    const cutoff=x1-hours*3600000; let base=-1; for(let i=0;i<xs.length;i++) if(xs[i]<=cutoff) base=i;
-    const el=document.createElement('div'); el.className='win'; const strong=document.createElement('b');
-    strong.textContent=base<0?'unknown':fmt(ys.at(-1)-ys[base]); el.append(strong,document.createTextNode(label+' before latest reading'+(base<0?' (insufficient history)':' (nearest earlier sample)'))); $('win').append(el);
+  drawnPoints=pts; chartPoints=[]; barPoints=[]; hideTip(); $('win').replaceChildren(); $('bars').replaceChildren();
+  const note=(historyFailed?'History refresh failed; cached readings. ':'')+pts.length+' readings · Dashed lines bridge unobserved gaps. Grey bars: no reading. Amber bars: change spans a gap. Changes use the later capture hour.'+(invalidHistoryRows?' '+invalidHistoryRows+' invalid rows skipped.':'');
+  $('chart-note').textContent=note;
+  const W=Math.max(280,$('chart').getBoundingClientRect().width||800), H=260, left=52,right=W-16,top=18,bottom=210;
+  chartWidths.chart=W; $('chart').setAttribute('viewBox','0 0 '+W+' '+H);
+  if(!pts.length){$('chart').innerHTML='<text x="16" y="50" fill="var(--dim)" font-size="13">Waiting for observations</text>';return;}
+  const xs=pts.map(p=>timestamp(p.at)),ys=pts.map(p=>p.downloadCount),x0=xs[0],x1=xs.at(-1);
+  let lo=ys[0],hi=ys[0];for(const n of ys){lo=Math.min(lo,n);hi=Math.max(hi,n);}
+  const rough=Math.max(1,(hi-lo)/4),power=10**Math.floor(Math.log10(rough)),fraction=rough/power;
+  const step=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power;
+  let y0=Math.max(0,Math.floor(lo/step)*step),y1=Math.ceil(hi/step)*step;
+  if(y0===y1){y0=Math.max(0,y0-step);y1+=step;}
+  const px=t=>x0===x1?(left+right)/2:left+(t-x0)/(x1-x0)*(right-left),py=n=>bottom-(n-y0)/(y1-y0)*(bottom-top);
+  const shortTime=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
+  const shortDate=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric'});
+  let html='';
+  for(let n=y0;n<=y1+step/2;n+=step){const y=py(n);html+='<line x1="'+left+'" x2="'+right+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(left-10)+'" y="'+(y+4)+'" text-anchor="end" fill="var(--dim)" font-size="11">'+fmt(n)+'</text>';}
+  let solid='',gaps='';
+  pts.forEach((p,i)=>{
+    const x=px(xs[i]),y=py(ys[i]),gap=i>0&&xs[i]-xs[i-1]>90*60000;
+    solid+=(i&&!gap?' L':' M')+x+','+y;
+    if(gap)gaps+='M'+px(xs[i-1])+','+py(ys[i-1])+' L'+x+','+y+' ';
+    const delta=i?ys[i]-ys[i-1]:null;
+    chartPoints.push({x,y,label:fmt(ys[i])+' downloads\n'+when(p.at)+(delta===null?'':'\n'+(delta>=0?'+':'')+delta+' since previous reading')+(gap?'\nUnobserved gap before this reading':'')+(p.approx?'\nApproximate reading':'')});
+  });
+  html+='<path d="'+gaps+'" fill="none" stroke="var(--accent)" opacity="0.45" stroke-width="1.5" stroke-dasharray="4 5"/><path d="'+solid+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+  html+=pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="2.5" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join('');
+  const nt=x0===x1?1:W<460?2:4;
+  for(let i=0;i<nt;i++){const t=nt===1?x0:x0+(x1-x0)*i/(nt-1),x=px(t),anchor=i===0?'start':i===nt-1?'end':'middle';html+='<text x="'+x+'" y="232" text-anchor="'+anchor+'" fill="var(--dim)" font-size="11">'+shortTime(t)+'</text><text x="'+x+'" y="248" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(t)+'</text>';}
+  html+='<line id="guide" y1="'+top+'" y2="'+bottom+'" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="marker" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>';
+  $('chart').innerHTML=html;
+  for(const [label,hours] of [['Last hour',1],['Last 6 hours',6],['Last 24 hours',24]]){
+    let base=-1;for(let i=0;i<xs.length;i++)if(xs[i]<=x1-hours*3600000)base=i;
+    const el=document.createElement('div'),strong=document.createElement('b');el.className='win';const d=base<0?null:ys.at(-1)-ys[base];strong.textContent=d===null?'Not enough data':(d>0?'+':'')+fmt(d);el.append(strong,document.createTextNode(label+' (approx.)'));el.title='Change from the nearest earlier sample, relative to the latest reading';$('win').append(el);
   }
   const buckets=new Map();
-  for(let i=1;i<pts.length;i++) { const hour=Math.floor(xs[i]/3600000)*3600000; const b=buckets.get(hour)||{count:0,gap:false}; b.count+=ys[i]-ys[i-1]; b.gap ||= xs[i]-xs[i-1]>90*60000; buckets.set(hour,b); }
-  const end=Math.floor(x1/3600000)*3600000, start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000), per=[];
-  for(let hour=start;hour<=end;hour+=3600000) per.push({hour,...(buckets.get(hour)||{count:null,gap:false})});
-  const max=Math.max(1,...per.map(b=>Math.abs(b.count||0))), bw=736/per.length, zero=50;
-  $('bars').innerHTML='<line x1="54" x2="790" y1="50" y2="50" stroke="var(--line)"/>'+per.map((b,i)=>{ const x=54+i*bw,h=b.count===null?0:Math.abs(b.count)/max*40; barPoints.push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+' capture hour: '+(b.count===null?'unknown (no interval ending in this hour)':(b.count>=0?'+':'')+b.count+' observed counter change'+(b.gap?'; spans a missing-data gap, hourly activity unknown':''))}); return b.count===null?'<text x="'+(x+bw/2)+'" y="54" text-anchor="middle" fill="var(--dim)" font-size="10">?</text>':'<rect x="'+(x+1)+'" y="'+(b.count>=0?zero-h:zero)+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,h)+'" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'"/>'; }).join('');
+  for(let i=1;i<pts.length;i++){const hour=Math.floor(xs[i]/3600000)*3600000,b=buckets.get(hour)||{count:0,gap:false};b.count+=ys[i]-ys[i-1];b.gap ||= xs[i]-xs[i-1]>90*60000;buckets.set(hour,b);}
+  const end=Math.floor(x1/3600000)*3600000,start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000),per=[];
+  for(let hour=start;hour<=end;hour+=3600000)per.push({hour,...(buckets.get(hour)||{count:null,gap:false})});
+  const BW=Math.max(280,$('bars').getBoundingClientRect().width||W),br=BW-16,bw=(br-left)/per.length;
+  chartWidths.bars=BW;$('bars').setAttribute('viewBox','0 0 '+BW+' 150');
+  const max=Math.max(1,...per.map(b=>b.count||0)),min=Math.min(0,...per.map(b=>b.count||0)),by=n=>108-(n-min)/(max-min)*88,zero=by(0);
+  let bars='<line x1="'+left+'" x2="'+br+'" y1="'+zero+'" y2="'+zero+'" stroke="var(--line)"/><text x="42" y="24" text-anchor="end" fill="var(--dim)" font-size="10">'+max+'</text>';
+  bars+=per.map((b,i)=>{const x=left+i*bw;barPoints.push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+'\n'+(b.count===null?'No observation in this hour':(b.count>=0?'+':'')+b.count+' observed change'+(b.gap?'\nSpans a gap; actual hourly activity unknown':''))});return b.count===null?'<rect x="'+(x+1)+'" y="'+(zero-2)+'" width="'+Math.max(1,bw-2)+'" height="3" rx="1" fill="var(--dim)" opacity="0.3"/>':'<rect x="'+(x+1)+'" y="'+Math.min(zero,by(b.count))+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,Math.abs(by(b.count)-zero))+'" rx="2" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'" opacity="0.85"/>';}).join('');
+  for(const i of [...new Set([0,Math.floor((per.length-1)/2),per.length-1])]){const x=left+(i+.5)*bw,anchor=i===0?'start':i===per.length-1?'end':'middle';bars+='<text x="'+x+'" y="128" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortTime(per[i].hour)+'</text><text x="'+x+'" y="143" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(per[i].hour)+'</text>';}
+  $('bars').innerHTML=bars;
 }
 function drawProjection(pts) {
   $('proj').replaceChildren(); $('proj-basis').textContent='Not enough history for a trend.';
@@ -373,11 +399,11 @@ function drawProjection(pts) {
   if(days<0.25) return;
   const daily=(last.downloadCount-base.downloadCount)/days;
   $('proj-basis').textContent=(historyFailed||liveFailed?'Cached-data scenario. ':'')+'Observed net change: '+Math.round(daily).toLocaleString()+'/day over '+days.toFixed(1)+' days, ending '+when(last.at)+'.';
-  const targets = [['Nov 1, 2026',Date.UTC(2026,10,1)],['Jan 1, 2027',Date.UTC(2027,0,1)]].filter(([,t]) => t > Date.now());
+  const targets = [['Nov 1, 2026',Date.parse('2026-11-01T00:00:00-07:00')],['Jan 1, 2027',Date.parse('2027-01-01T00:00:00-08:00')]].filter(([,t]) => t > Date.now());
   if (!targets.length) targets.push(['In 30 days',Date.now()+30*86400000],['In 90 days',Date.now()+90*86400000]);
   for(const [label,target] of targets) {
     const daysAhead=(target-end)/86400000;
-    const estimate=Math.round(last.downloadCount+daily*daysAhead), tr=document.createElement('tr'), lab=document.createElement('td'), val=document.createElement('td'); lab.className='lab'; val.className='val'; lab.textContent=label+' (UTC)'; val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful'; tr.append(lab,val); $('proj').append(tr);
+    const estimate=Math.round(last.downloadCount+daily*daysAhead), tr=document.createElement('tr'), lab=document.createElement('td'), val=document.createElement('td'); lab.className='lab'; val.className='val'; lab.textContent=label+' (Pacific)'; val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful'; tr.append(lab,val); $('proj').append(tr);
   }
 }
 async function refreshLive() {
@@ -402,6 +428,7 @@ async function refreshLive() {
 }
 const tip=document.createElement('div'); tip.id='tip'; tip.className='tip'; tip.setAttribute('role','status'); tip.setAttribute('aria-live','polite'); document.body.append(tip);
 for(const target of ['github','imac']) $(prefix(target)+'-total').addEventListener('input',()=>{dirty[target]=true;});
+if (typeof ResizeObserver !== 'undefined') { let resizeTimer; new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer=setTimeout(()=>drawHistory(drawnPoints),100); }).observe($('chart')); }
 attachChart('chart',()=>chartPoints); attachChart('bars',()=>barPoints);
 refreshTokenUi(); refreshLive();
 setInterval(() => { if (!document.hidden) refreshLive(); },120000);

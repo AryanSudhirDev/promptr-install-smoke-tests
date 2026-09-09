@@ -258,7 +258,7 @@ test('keyboard tooltips include year and timezone; empty charts clear interactio
   const d = await dashboard();
   for (const id of ['chart', 'bars']) {
     assert.equal(d.el(id).getAttribute('tabindex'), '0');
-    d.el(id).dispatch('focus'); assert.match(d.el('tip').textContent, /2026.*UTC/);
+    d.el(id).dispatch('focus'); assert.match(d.el('tip').textContent, /2026.*P[DS]T/);
     d.el(id).dispatch('keydown', { key: 'End' }); assert.equal(d.el('tip').style.display, 'block');
     d.el(id).dispatch('keydown', { key: 'ArrowLeft' });
     d.el(id).dispatch('keydown', { key: 'Escape' }); assert.equal(d.el('tip').style.display, 'none');
@@ -270,4 +270,10 @@ test('keyboard tooltips include year and timezone; empty charts clear interactio
   assert.equal(d.el('proj').children.length, 0);
   d.el('chart').dispatch('keydown', { key: 'ArrowRight' }); assert.equal(d.el('tip').style.display, 'none');
   assert.match(d.el('proj-note').textContent, /not a forecast or guarantee/);
+});
+
+test('Pacific timestamps switch automatically between daylight and standard time', async () => {
+  const d = await dashboard();
+  assert.match(d.run("when('2026-09-05T12:00:00Z')"), /05:00 AM PDT/);
+  assert.match(d.run("when('2026-01-05T12:00:00Z')"), /04:00 AM PST/);
 });
