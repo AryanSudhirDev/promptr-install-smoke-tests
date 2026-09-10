@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {countForSlot, initialState, advance, pendingJobs, SLOT_MS, slotAt} from '../imac/schedule.mjs';
 const day=Date.parse('2026-09-10T00:02:00Z');
 test('every supported daily total produces its exact count over 288 slots',()=>{
-  for(let total=1;total<=1000;total++){
+  for(let total=1;total<=8000;total++){
     let sum=0;for(let i=0;i<288;i++)sum+=countForSlot(day+i*SLOT_MS,total);
     assert.equal(sum,total);
   }
@@ -35,4 +35,12 @@ test('slot IDs are unique across midnight and repeated invocations',()=>{
   const now=day+287*SLOT_MS,s=initialState(now,1000);advance(s,now+2*SLOT_MS,1000);
   const n=Object.keys(s.jobs).length;assert.ok(n>=6);advance(s,now+2*SLOT_MS,1000);assert.equal(Object.keys(s.jobs).length,n);
   assert.equal(slotAt(day+1),day);
+});
+
+test('8000 distributes 27-28 checks per slot without increasing concurrency',()=>{
+  for(let i=0;i<288;i++)assert.ok([27,28].includes(countForSlot(day+i*SLOT_MS,8000)));
+  const s=initialState(day,8000);advance(s,day+12*SLOT_MS,8000);
+  const n=pendingJobs(s,10000).length;assert.ok(n>100);
+  for(const job of pendingJobs(s,100))job.status='passed';
+  assert.equal(pendingJobs(s,10000).length,n-100);
 });

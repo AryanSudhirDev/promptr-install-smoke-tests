@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 const REPO = process.env.QA_REPO || 'AryanSudhirDev/promptr-install-smoke-tests';
 const ORIGINS = new Set(['https://aryansudhirdev.github.io', 'https://promptr-qa-dashboard.vercel.app',
   'http://localhost:4321', 'http://localhost:4322', 'http://localhost:4323']);
-const validTotal = (n) => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 1000;
+const validTotal = (n, target = 'imac') => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= (target === 'github' ? 1000 : 8000);
 async function gh(path, init = {}) {
   const response = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
     ...init, signal: AbortSignal.timeout(10000), headers: {
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         gh('/actions/variables/MONITOR_CHECKS_PER_DAY'), gh('/contents/monitor-config.json'),
       ]);
       if (results[0].status === 'fulfilled') {
-        const n = Number(results[0].value.value); if (validTotal(n)) settings.github = n;
+        const n = Number(results[0].value.value); if (validTotal(n, 'github')) settings.github = n;
       }
       if (results[1].status === 'fulfilled') {
         try { const n = JSON.parse(Buffer.from(results[1].value.content, 'base64').toString()).imacDailyTotal;
@@ -56,7 +56,7 @@ export default async function handler(req, res) {
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { return res.status(400).json({ error: 'invalid JSON' }); } }
   const { target, total } = body || {};
   if (!['github', 'imac'].includes(target)) return res.status(400).json({ error: 'target must be github or imac' });
-  if (!validTotal(total)) return res.status(400).json({ error: 'total must be a whole number from 1 to 1000' });
+  if (!validTotal(total, target)) return res.status(400).json({ error: 'total must be a whole number from 1 to ' + (target === 'github' ? 1000 : 8000) });
   try {
     if (target === 'github') {
       await gh('/actions/variables/MONITOR_CHECKS_PER_DAY', { method: 'PATCH',

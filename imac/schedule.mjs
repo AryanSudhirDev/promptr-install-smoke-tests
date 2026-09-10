@@ -2,10 +2,10 @@ export const SLOT_MS = 5 * 60000;
 export const SLOTS_PER_DAY = 288;
 export const LOOKBACK_MS = 6 * 3600000;
 const OFFSET = 2 * 60000;
-export const validTotal = n => Number.isInteger(n) && n >= 1 && n <= 1000;
+export const validTotal = n => Number.isInteger(n) && n >= 1 && n <= 8000;
 export const slotAt = ms => Math.floor((ms - OFFSET) / SLOT_MS) * SLOT_MS + OFFSET;
 export function countForSlot(ms, total) {
-  if (!validTotal(total)) throw new Error('daily total must be 1-1000');
+  if (!validTotal(total)) throw new Error('daily total must be 1-8000');
   const date = new Date(ms), index = Math.floor((date.getUTCHours() * 60 + date.getUTCMinutes()) / 5);
   return Math.floor((index + 1) * total / SLOTS_PER_DAY) - Math.floor(index * total / SLOTS_PER_DAY);
 }

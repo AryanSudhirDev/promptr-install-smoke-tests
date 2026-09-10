@@ -122,7 +122,7 @@
       <div class="where">Fresh container per check · every 5 minutes · 3 concurrent max</div>
       <label for="im-total">Checks per day</label>
       <div class="row">
-        <input type="number" id="im-total" min="1" max="1000" inputmode="numeric" />
+        <input type="number" id="im-total" min="1" max="8000" inputmode="numeric" />
         <button id="im-save" onclick="save('imac')">Save</button>
       </div>
       <div class="msg" role="status" aria-live="polite" id="im-msg"></div>
@@ -200,7 +200,7 @@ storage.remove('promptr_qa_token');
 const dashboardKey = () => { const key = storage.get(KEY_STORE); return typeof key === 'string' && !/^(github_pat_|gh[pousr]_)/i.test(key.trim()) ? key.trim() : ''; };
 const readJSON = key => { try { return JSON.parse(storage.get(key)); } catch { return null; } };
 const count = n => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
-const rate = n => count(n) !== null && n >= 1 && n <= 1000 ? n : null;
+const rate = (n, target = 'imac') => count(n) !== null && n >= 1 && n <= (target === 'github' ? 1000 : 8000) ? n : null;
 const timestamp = value => {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const n = Date.parse(value); return Number.isFinite(n) && n <= Date.now() + 60000 ? n : null;
@@ -267,11 +267,11 @@ async function save(target) {
   const key = dashboardKey();
   if (!key) { $('tokbox').open = true; $('token').focus(); msg.textContent = 'Enter a dashboard key below.'; return; }
   const value = $(id + '-total').value.trim(), n = Number(value);
-  if (!value || rate(n) === null) { msg.textContent = 'Enter a whole number from 1 to 1000.'; return; }
+  if (!value || rate(n, target) === null) { msg.textContent = 'Enter a whole number from 1 to ' + (target === 'github' ? 1000 : 8000) + '.'; return; }
   saving = true; revision++; refreshTokenUi(); msg.className = 'msg'; msg.textContent = 'Saving…';
   try {
     const j = await request(API, {method:'POST', headers:{'Content-Type':'application/json','x-dash-key':key}, body:JSON.stringify({target,total:n})});
-    if (j?.ok !== true || j.target !== target || rate(j.total) !== n) throw new Error('unexpected save response');
+    if (j?.ok !== true || j.target !== target || rate(j.total, target) !== n) throw new Error('unexpected save response');
     settings[target] = n; pending[target] = {value:n}; dirty[target] = false;
     msg.className = 'msg ok'; msg.textContent = 'Accepted: ' + n + '/day. Awaiting a fresh server read; execution is not guaranteed.';
   } catch (e) {
@@ -284,7 +284,7 @@ function applySettings(j, readRevision) {
   if (saving || revision !== readRevision) return;
   for (const target of ['github','imac']) {
     if (!j.settings || !Object.prototype.hasOwnProperty.call(j.settings, target)) continue;
-    const value = rate(j.settings[target]);
+    const value = rate(j.settings[target], target);
     authoritative[target] = true;
     if (pending[target]) {
       if (value === null) continue; // partial server failure cannot undo an accepted write
@@ -304,7 +304,7 @@ function renderStatus() {
   $('gh-stats').textContent = (stale ? 'Stale/unavailable snapshot. ' : 'Published snapshot. ') + 'GitHub UTC day of snapshot: ' + fmt(count(g.checksToday)) + ' passed, ' + fmt(failures) + ' failed; ' + fmt(count(g.runsToday)) + ' runs. Last run: ' + when(g.lastRunAt) + '. Updated: ' + when(statusData?.updatedAt) + '.';
   const sameDay = updated !== null && (g.day || new Date(updated).toISOString().slice(0,10)) === new Date().toISOString().slice(0,10);
   $('today').textContent = !stale && sameDay && g.countsComplete !== false ? fmt(count(g.checksToday)) : 'unknown (stale snapshot)';
-  for (const target of ['github','imac']) if (!authoritative[target] && !pending[target]) settings[target] = rate(statusData?.[target]?.dailyTotal);
+  for (const target of ['github','imac']) if (!authoritative[target] && !pending[target]) settings[target] = rate(statusData?.[target]?.dailyTotal, target);
 }
 async function fetchLive() {
   const j = await request('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());

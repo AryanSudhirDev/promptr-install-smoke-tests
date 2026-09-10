@@ -218,7 +218,7 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 
 Source: `imac/`. Deployed under `~/promptr-qa/monitor` on the iMac.
 
-- Dashboard accepts 1–1000 checks/day. The host reads the existing repo setting every invocation.
+- The iMac dashboard accepts 1–8000 checks/day; GitHub remains capped at 1000. The host reads the existing repo setting every invocation.
 - Five-minute slots at :02/:07/.../:57, 288 per UTC day. Exact total uses cumulative integer allocation, so 780 means 2–3 checks per slot, not six per half-hour.
 - Maximum three concurrent containers. Launchd prevents overlapping service runs; a PID lock also protects manual invocations.
 - Durable per-job queue (`scheduler-v2.json`): max 100 jobs or 20 minutes of new starts per invocation; untouched jobs remain pending. Started jobs are not retried automatically after interruption.
@@ -228,4 +228,8 @@ Source: `imac/`. Deployed under `~/promptr-qa/monitor` on the iMac.
 - Installation success requires the extension-test success marker, not just a successful container exit.
 - Local `status-v2.json` and `history.jsonl` expose passed/failed/pending/expired/interrupted counts. Hosted dashboard still lacks the iMac heartbeat and must not infer health from a setting.
 - Pre-migration runner and plist backed up at `~/promptr-qa/monitor/backups/pre-v2/`.
-- Regression: `npm run test:dashboard` includes every allowed total from 1 through 1000, changes, midnight rollover, batch caps, and expiration, without running containers or downloading the extension.
+- Regression: `npm run test:dashboard` includes every allowed iMac total from 1 through 8000, changes, midnight rollover, batch caps, and expiration, without running containers or downloading the extension.
+
+### iMac ceiling increased to 8,000 (2026-09-09)
+
+Only the accepted configuration range changed; current rate remains 780/day. A full 8,000/day plan has 27–28 jobs in each five-minute slot. Three-container concurrency, bounded queues, the six-hour catch-up window, and per-container fresh Open VSX downloads are unchanged. No artifact caching was deployed. This is a software ceiling, not a hardware throughput certification: 8,000/day has not been load-tested, and slower runs may queue or expire.
