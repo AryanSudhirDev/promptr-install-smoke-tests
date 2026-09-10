@@ -119,7 +119,7 @@
 
     <div class="card c-im">
       <h2><span class="dot" id="im-dot"></span> iMac monitor</h2>
-      <div class="where">Fresh container per check · home IP · slots :22 / :52</div>
+      <div class="where">Fresh container per check · every 5 minutes · 3 concurrent max</div>
       <label for="im-total">Checks per day</label>
       <div class="row">
         <input type="number" id="im-total" min="1" max="1000" inputmode="numeric" />
@@ -245,7 +245,7 @@ function renderSettings() {
   }
   $('combined').textContent = settings.github === null || settings.imac === null ? 'unknown' : fmt(settings.github + settings.imac);
   $('im-dot').className = 'dot';
-  $('im-stats').textContent = 'Health unknown. Configuration is not proof of execution; per-check status is available only on the iMac’s local dashboard.';
+  $('im-stats').textContent = (settings.imac === null ? '' : '288 slots/day; ' + Math.floor(settings.imac / 288) + '–' + Math.ceil(settings.imac / 288) + ' checks/slot at this setting. ') + 'Health unknown. Configuration is not proof of execution; per-check status is available only on the iMac’s local dashboard.';
 }
 function refreshTokenUi() {
   renderSettings();

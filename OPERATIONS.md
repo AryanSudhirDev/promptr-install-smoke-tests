@@ -213,3 +213,19 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 - Do not route traffic through proxies/VPN rotation to obscure the source.
 - Never commit `github_token`, `.env`, or `imac_ed25519`.
 - If GitHub ever emails about Actions usage, reply promptly with the QA repo README.
+
+## iMac scheduler v2 (2026-09-09)
+
+Source: `imac/`. Deployed under `~/promptr-qa/monitor` on the iMac.
+
+- Dashboard accepts 1–1000 checks/day. The host reads the existing repo setting every invocation.
+- Five-minute slots at :02/:07/.../:57, 288 per UTC day. Exact total uses cumulative integer allocation, so 780 means 2–3 checks per slot, not six per half-hour.
+- Maximum three concurrent containers. Launchd prevents overlapping service runs; a PID lock also protects manual invocations.
+- Durable per-job queue (`scheduler-v2.json`): max 100 jobs or 20 minutes of new starts per invocation; untouched jobs remain pending. Started jobs are not retried automatically after interruption.
+- Six-hour catch-up window. Expired jobs and missed scheduling slots are explicitly counted, not claimed as passes. Seven-day scheduler-state retention; per-job reports remain on disk.
+- Setting changes apply to future slots after the next configuration read. A partial day is prorated, not backfilled to the new daily total.
+- Migration starts at the current slot; the previous capped runner's skipped jobs are not replayed.
+- Installation success requires the extension-test success marker, not just a successful container exit.
+- Local `status-v2.json` and `history.jsonl` expose passed/failed/pending/expired/interrupted counts. Hosted dashboard still lacks the iMac heartbeat and must not infer health from a setting.
+- Pre-migration runner and plist backed up at `~/promptr-qa/monitor/backups/pre-v2/`.
+- Regression: `npm run test:dashboard` includes every allowed total from 1 through 1000, changes, midnight rollover, batch caps, and expiration, without running containers or downloading the extension.

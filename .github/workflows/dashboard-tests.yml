@@ -2,9 +2,9 @@ name: Dashboard regression tests
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', '.github/workflows/dashboard-tests.yml']
+    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', 'imac/**', '.github/workflows/dashboard-tests.yml']
   pull_request:
-    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', '.github/workflows/dashboard-tests.yml']
+    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', 'imac/**', '.github/workflows/dashboard-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
