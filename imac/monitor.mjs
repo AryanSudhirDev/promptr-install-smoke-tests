@@ -45,7 +45,7 @@ async function run(job){
   try{
     const r=await exec('docker',['run','--rm','--name',name,'--memory','2g','--shm-size','512m',
       '-e','TEST_VARIANT='+variant,'-e','TEST_RUN='+job.id,'-e','DAILY_PLAN_DATE='+new Date(job.slot).toISOString().slice(0,10),
-      '-v',out+':/opt/check/results',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:12*60000});
+      '-v',out+':/opt/check/results','-v',path.join(here,'extended-suite.cjs')+':/opt/check/extended-suite.cjs:ro',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:12*60000});
     fs.writeFileSync(path.join(out,'container.log'),r.stdout+'\n--- stderr ---\n'+r.stderr);
     // Exit zero alone is insufficient: require the actual extension-test success marker.
     if(!r.stdout.includes('PROMPTR_EXTENDED_SMOKE_TEST_PASSED'))throw new Error('test success marker missing');

@@ -233,3 +233,13 @@ Source: `imac/`. Deployed under `~/promptr-qa/monitor` on the iMac.
 ### iMac ceiling increased to 8,000 (2026-09-09)
 
 Only the accepted configuration range changed; current rate remains 780/day. A full 8,000/day plan has 27–28 jobs in each five-minute slot. Three-container concurrency, bounded queues, the six-hour catch-up window, and per-container fresh Open VSX downloads are unchanged. No artifact caching was deployed. This is a software ceiling, not a hardware throughput certification: 8,000/day has not been load-tested, and slower runs may queue or expire.
+
+## Three-command coverage and report compression (2026-09-09)
+
+The iMac mounts the repository-tracked `imac/extended-suite.cjs` read-only into each fresh container. It verifies declaration and registration of `generatePrompt`, `setTemperature`, and `setCustomContext`; it no longer explicitly verifies `enterAccessToken`. Every report lists this coverage omission. Installation, activation, settings, shortcut and variant checks are retained, as is a fresh registry download per container. Reducing name checks is not expected to materially lower CPU/RAM.
+
+`imac/archive-reports.mjs` compresses completed reports older than 24 hours, grouped by Pacific completion day. It extracts each generated archive into a temporary directory, compares all file sizes and SHA-256 hashes, rechecks the source, writes a manifest, then removes only verified source folders. Active/recent/unrecognized reports and scheduler ledgers stay untouched. Copies of older VS Code logs sometimes have write-only owner permissions; archival adds owner-read permission only where needed. Symlinks cause safe failure without deleting originals.
+
+Archives and per-file manifests live at `~/promptr-qa/monitor/archives/`. The `dev.aryansudhir.promptr-qa-archive` LaunchAgent runs at 03:10 local Pacific time. Archival has a separate lock and leaves source reports intact on failed verification. It does not compress the active job ledger, change rates, or alter downloads.
+
+First verified pass: 352 completed reports, 10,977,546 source bytes to 5,080,283 archive bytes (about 54% smaller, excluding manifest overhead). A separate fresh-container verification confirmed the three-command suite, fresh VSIX download and extension activation passed.

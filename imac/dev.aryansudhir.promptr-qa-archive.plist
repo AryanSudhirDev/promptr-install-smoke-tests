@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>dev.aryansudhir.promptr-qa-archive</string>
+<key>ProgramArguments</key><array><string>/Users/Aryan/.local/bin/node</string><string>/Users/Aryan/promptr-qa/monitor/archive-reports.mjs</string></array>
+<key>StartCalendarInterval</key><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>10</integer></dict>
+<key>RunAtLoad</key><false/>
+<key>StandardOutPath</key><string>/Users/Aryan/promptr-qa/logs/archive.log</string>
+<key>StandardErrorPath</key><string>/Users/Aryan/promptr-qa/logs/archive.err</string>
+</dict></plist>
