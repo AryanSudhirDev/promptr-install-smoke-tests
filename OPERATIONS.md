@@ -243,3 +243,11 @@ The iMac mounts the repository-tracked `imac/extended-suite.cjs` read-only into 
 Archives and per-file manifests live at `~/promptr-qa/monitor/archives/`. The `dev.aryansudhir.promptr-qa-archive` LaunchAgent runs at 03:10 local Pacific time. Archival has a separate lock and leaves source reports intact on failed verification. It does not compress the active job ledger, change rates, or alter downloads.
 
 First verified pass: 352 completed reports, 10,977,546 source bytes to 5,080,283 archive bytes (about 54% smaller, excluding manifest overhead). A separate fresh-container verification confirmed the three-command suite, fresh VSIX download and extension activation passed.
+
+## Hard-deadline recovery (2026-09-12)
+
+A UI test completed its assertions at 09:12 PDT but the VS Code main process stayed open. The original `execFile` timeout sent SIGTERM and waited for Docker/its pipes to close, so the scheduler stayed blocked for hours. Its report and recovered container log were preserved; the container was force-removed and its job recorded as interrupted. The scheduler then adopted the dashboard's 1400/day setting.
+
+`imac/exec-bounded.mjs` uses a dedicated process group, a hard wall-clock timer, SIGKILL escalation on failure, bounded output, and independent promise settlement so ignored signals/inherited pipes cannot block the queue. Each test now has five minutes; cleanup gets 20 seconds. Cleanup failure stops new starts and is retried next invocation. Docker readiness and Colima startup are also bounded and happen after reading configuration. The launcher preserves Node's error exit status. Status updates publish after every completed test, not only at batch end.
+
+`MAX_JOBS_PER_RUN=6 node monitor.mjs` was used once for recovery validation: 6 passed, 0 failed. Default remains 100 jobs per invocation, three concurrent, with a 20-minute new-start budget and normal five-minute launchd scheduling. Regression tests explicitly cover ignored SIGTERM and grandchildren holding output pipes open.
