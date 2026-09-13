@@ -52,3 +52,10 @@ test('iMac supports 8000 but GitHub retains its 1000 ceiling',async()=>{
   assert.equal((await invoke('POST',{target:'github',total:1001})).code,400);
   assert.equal((await invoke('POST',{target:'imac',total:8001})).code,400);
 });
+test('editing Promptr rate preserves the independent CogniSpec target',async()=>{
+ globalThis.fetch=async(url,init)=>{
+  if(init.method==='PUT'){const payload=JSON.parse(init.body),saved=JSON.parse(Buffer.from(payload.content,'base64').toString());assert.equal(saved.imacDailyTotal,1500);assert.equal(saved.cognispecDailyTotal,1189);return new Response('{}');}
+  return new Response(JSON.stringify({sha:'fixture',content:Buffer.from(JSON.stringify({imacDailyTotal:1400,cognispecDailyTotal:1189})).toString('base64')}));
+ };
+ assert.equal((await invoke('POST',{target:'imac',total:1500})).code,200);
+});
