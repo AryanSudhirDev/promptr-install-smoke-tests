@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {boundedExec as exec} from './exec-bounded.mjs';
+import registryLimiter from './registry-fetch.cjs';
+const {initializeLimiter,readState:readLimiterState,SPACING_MS}=registryLimiter;
 import {initialState,advance,pendingJobs,validTotal} from './schedule.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
+const limiterDir=path.join(here,'registry-limit');
 const stateFile=path.join(here,'scheduler-v2.json'),lock=path.join(here,'.monitor-v2.lock');
 const atomic=(file,data)=>{const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data,null,2)+'\n');fs.renameSync(tmp,file);};
 function acquire(){
@@ -44,14 +47,25 @@ for(const job of Object.values(state.jobs).filter(j=>j.status==='started'||j.sta
   catch(e){job.status='cleanup_pending';persist();blocked('Container cleanup unavailable: '+e.message);process.exit(1);}
   job.status='interrupted';job.finishedAt=new Date().toISOString();persist();
 }
+// Never clear an orphan mutex while a prior requester may still be alive.
+try{
+  const r=await exec('docker',['ps','-a','--format','{{.Names}}'],{timeout:10000});
+  if(r.stdout.split(/\r?\n/).some(name=>name.startsWith('promptr-check-')))throw new Error('Prior QA container still exists');
+  initializeLimiter(limiterDir,{containersAbsent:true});
+}catch(e){blocked('Registry limiter recovery blocked: '+e.message);process.exit(1);}
 const concurrency=3,maxPerRun=process.env.MAX_JOBS_PER_RUN?Number(process.env.MAX_JOBS_PER_RUN):100,timeBudget=20*60000;
 if(!Number.isInteger(maxPerRun)||maxPerRun<1||maxPerRun>100)throw new Error('invalid MAX_JOBS_PER_RUN');
-let cleanupBlocked=false;
+let cleanupBlocked=false,ratePaused=false,limiterBlocked=false;
+function canStart(){
+  if(cleanupBlocked||limiterBlocked||ratePaused)return false;
+  if(readLimiterState(limiterDir).cooldownUntil>Date.now()){ratePaused=true;return false;}
+  return true;
+}
 const due=pendingJobs(state,maxPerRun),queue=[...due],results=[];
 console.log(`[monitor] ${new Date().toISOString()} configured=${total}/day slots=288/day pending=${pendingJobs(state,10000).length} batch=${due.length} concurrency=${concurrency}`);
 const variants=['manifest','clean-state','settings-isolation','ui-settings','reinstall','duplicate-install'];
 const started=Date.now();
-function publish(phase='running'){const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:total,slotsPerDay:288,phase,selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>j.status==='failed'||j.status==='cleanup_pending').length,pending:pendingJobs(state,10000).length,missedSlots:state.missedSlots,expired:Object.values(state.jobs).filter(j=>j.status==='expired').length,interrupted:Object.values(state.jobs).filter(j=>j.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};atomic(statusFile,summary);return summary;}
+function publish(phase='running'){const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:total,slotsPerDay:288,phase,registryLimiter:{spacingMs:SPACING_MS,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>j.status==='failed'||j.status==='cleanup_pending').length,pending:pendingJobs(state,10000).length,missedSlots:state.missedSlots,expired:Object.values(state.jobs).filter(j=>j.status==='expired').length,interrupted:Object.values(state.jobs).filter(j=>j.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};atomic(statusFile,summary);return summary;}
 publish();
 async function run(job){
   const out=path.join(here,'reports',job.id);fs.mkdirSync(out,{recursive:true});
@@ -60,8 +74,9 @@ async function run(job){
   const begin=Date.now(),name='promptr-check-'+job.id;
   try{
     const r=await exec('docker',['run','--rm','--name',name,'--memory','2g','--shm-size','512m',
-      '-e','TEST_VARIANT='+variant,'-e','TEST_RUN='+job.id,'-e','DAILY_PLAN_DATE='+new Date(job.slot).toISOString().slice(0,10),
-      '-v',out+':/opt/check/results','-v',path.join(here,'extended-suite.cjs')+':/opt/check/extended-suite.cjs:ro',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:5*60000});
+      '-e','REGISTRY_LIMIT_DIR=/opt/check/registry-limit','-e','TEST_VARIANT='+variant,'-e','TEST_RUN='+job.id,'-e','DAILY_PLAN_DATE='+new Date(job.slot).toISOString().slice(0,10),
+      '-v',limiterDir+':/opt/check/registry-limit','-v',path.join(here,'registry-fetch.cjs')+':/opt/check/registry-fetch.cjs:ro',
+      '-v',path.join(here,'container-check.cjs')+':/opt/check/container-check.cjs:ro','-v',out+':/opt/check/results','-v',path.join(here,'extended-suite.cjs')+':/opt/check/extended-suite.cjs:ro',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:5*60000});
     fs.writeFileSync(path.join(out,'container.log'),r.stdout+'\n--- stderr ---\n'+r.stderr);
     // Exit zero alone is insufficient: require the actual extension-test success marker.
     if(!r.stdout.includes('PROMPTR_EXTENDED_SMOKE_TEST_PASSED'))throw new Error('test success marker missing');
@@ -70,12 +85,18 @@ async function run(job){
     job.status='failed';job.error=String(e.message).slice(0,200);
     if(e.stdout||e.stderr)fs.writeFileSync(path.join(out,'container.log'),(e.stdout||'')+'\n--- stderr ---\n'+(e.stderr||''));
     try{await removeContainer(name);}catch(cleanupError){cleanupBlocked=true;job.status='cleanup_pending';job.cleanupError=cleanupError.message;}
+    // A terminated holder leaves a mutex. No live container may steal it; stop and recover next run.
+    if(fs.existsSync(path.join(limiterDir,'lock'))){
+      try{if(JSON.parse(fs.readFileSync(path.join(limiterDir,'lock','owner.json'))).runId===job.id)limiterBlocked=true;}
+      catch{limiterBlocked=true;}
+    }
+    if((e.stdout||'').includes('PROMPTR_REGISTRY_COOLDOWN')||(e.stderr||'').includes('PROMPTR_REGISTRY_COOLDOWN'))ratePaused=true;
   }
-  job.seconds=Math.round((Date.now()-begin)/100)/10;job.finishedAt=new Date().toISOString();persist();results.push(job);publish(cleanupBlocked?'blocked':'running');
+  job.seconds=Math.round((Date.now()-begin)/100)/10;job.finishedAt=new Date().toISOString();persist();results.push(job);publish(cleanupBlocked||limiterBlocked?'blocked':ratePaused?'cooldown':'running');
   console.log(`[monitor] ${job.id} ${variant}: ${job.status} in ${job.seconds}s`);
 }
-await Promise.all(Array.from({length:concurrency},async()=>{while(!cleanupBlocked&&queue.length&&Date.now()-started<timeBudget)await run(queue.shift());}));
-const summary=publish(cleanupBlocked?'blocked':'idle');
+await Promise.all(Array.from({length:concurrency},async()=>{while(queue.length&&Date.now()-started<timeBudget&&canStart())await run(queue.shift());}));
+const summary=publish(cleanupBlocked||limiterBlocked?'blocked':ratePaused?'cooldown':'idle');
 fs.appendFileSync(path.join(here,'history.jsonl'),JSON.stringify(summary)+'\n');
 atomic(path.join(here,'status-v2.json'),summary);console.log('[monitor] '+JSON.stringify(summary));
-process.exitCode=summary.failed||cleanupBlocked?1:0;
+process.exitCode=summary.failed||cleanupBlocked||limiterBlocked?1:0;
