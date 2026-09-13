@@ -19,13 +19,14 @@ test('reject unauthenticated, foreign origin and unsupported methods', async () 
 });
 test('strict validation rejects coercions and malformed JSON', async () => {
   for (const total of [0,8001,1.4,true,'200',null]) assert.equal((await invoke('POST',{target:'imac',total})).code,400);
+  for (const total of [-1,8001,1.4,true,'200',null]) assert.equal((await invoke('POST',{target:'cognispec',total})).code,400);
   assert.equal((await invoke('POST','{')).code,400);
   assert.equal((await invoke('POST',{target:'other',total:200})).code,400);
 });
 test('GET returns authoritative settings without credentials and disables caching', async () => {
   globalThis.fetch = async url => new Response(JSON.stringify(url.includes('/variables/') ? {value:'80'} :
-    {content:Buffer.from(JSON.stringify({imacDailyTotal:300})).toString('base64')}));
-  const r=await invoke('GET'); assert.deepEqual(r.body.settings,{github:80,imac:300});
+    {content:Buffer.from(JSON.stringify({imacDailyTotal:300,cognispecDailyTotal:1189})).toString('base64')}));
+  const r=await invoke('GET'); assert.deepEqual(r.body.settings,{github:80,imac:300,cognispec:1189});
   assert.equal(r.headers['Cache-Control'],'no-store'); assert.ok(!JSON.stringify(r.body).includes('test-key'));
 });
 test('config update preserves fields and retries a conflict', async () => {
@@ -51,6 +52,7 @@ test('iMac supports 8000 but GitHub retains its 1000 ceiling',async()=>{
   assert.equal((await invoke('POST',{target:'imac',total:8000})).code,200);
   assert.equal((await invoke('POST',{target:'github',total:1001})).code,400);
   assert.equal((await invoke('POST',{target:'imac',total:8001})).code,400);
+  assert.equal((await invoke('POST',{target:'cognispec',total:0})).code,200);
 });
 test('editing Promptr rate preserves the independent CogniSpec target',async()=>{
  globalThis.fetch=async(url,init)=>{

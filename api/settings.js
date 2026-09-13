@@ -3,7 +3,8 @@ import { timingSafeEqual } from 'node:crypto';
 const REPO = process.env.QA_REPO || 'AryanSudhirDev/promptr-install-smoke-tests';
 const ORIGINS = new Set(['https://aryansudhirdev.github.io', 'https://promptr-qa-dashboard.vercel.app',
   'http://localhost:4321', 'http://localhost:4322', 'http://localhost:4323']);
-const validTotal = (n, target = 'imac') => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= (target === 'github' ? 1000 : 8000);
+const validTotal = (n, target = 'imac') => typeof n === 'number' && Number.isInteger(n) && n >= (target === 'cognispec' ? 0 : 1) && n <= (target === 'github' ? 1000 : 8000);
+const rangeFor = target => target === 'github' ? '1 to 1000' : target === 'cognispec' ? '0 to 8000' : '1 to 8000';
 async function gh(path, init = {}) {
   const response = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
     ...init, signal: AbortSignal.timeout(10000), headers: {
@@ -33,7 +34,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   const writable = Boolean(process.env.GH_TOKEN && process.env.DASH_KEY);
   if (req.method === 'GET') {
-    const settings = { github: null, imac: null };
+    const settings = { github: null, imac: null, cognispec: null };
     if (writable) {
       const results = await Promise.allSettled([
         gh('/actions/variables/MONITOR_CHECKS_PER_DAY'), gh('/contents/monitor-config.json'),
@@ -43,7 +44,9 @@ export default async function handler(req, res) {
       }
       if (results[1].status === 'fulfilled') {
         try { const n = JSON.parse(Buffer.from(results[1].value.content, 'base64').toString()).imacDailyTotal;
-          if (validTotal(n)) settings.imac = n;
+          if (validTotal(n, 'imac')) settings.imac = n;
+          const cognispec = JSON.parse(Buffer.from(results[1].value.content, 'base64').toString()).cognispecDailyTotal;
+          if (validTotal(cognispec, 'cognispec')) settings.cognispec = cognispec;
         } catch {}
       }
     }
@@ -55,23 +58,24 @@ export default async function handler(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { return res.status(400).json({ error: 'invalid JSON' }); } }
   const { target, total } = body || {};
-  if (!['github', 'imac'].includes(target)) return res.status(400).json({ error: 'target must be github or imac' });
-  if (!validTotal(total, target)) return res.status(400).json({ error: 'total must be a whole number from 1 to ' + (target === 'github' ? 1000 : 8000) });
+  if (!['github', 'imac', 'cognispec'].includes(target)) return res.status(400).json({ error: 'target must be github, imac, or cognispec' });
+  if (!validTotal(total, target)) return res.status(400).json({ error: 'total must be a whole number from ' + rangeFor(target) });
   try {
     if (target === 'github') {
       await gh('/actions/variables/MONITOR_CHECKS_PER_DAY', { method: 'PATCH',
         body: JSON.stringify({ name: 'MONITOR_CHECKS_PER_DAY', value: String(total) }) });
     } else {
       // Preserve unrelated configuration and retry once when another writer changes its SHA.
+      const field = target === 'imac' ? 'imacDailyTotal' : 'cognispecDailyTotal';
       for (let attempt = 0; attempt < 2; attempt++) {
         const cur = await gh('/contents/monitor-config.json');
         const config = JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8'));
         if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('invalid config');
-        if (config.imacDailyTotal === total) break;
-        config.imacDailyTotal = total;
+        if (config[field] === total) break;
+        config[field] = total;
         try {
           await gh('/contents/monitor-config.json', { method: 'PUT', body: JSON.stringify({
-            message: `Set iMac checks per day to ${total} [skip ci]`,
+            message: `Set ${target} iMac checks per day to ${total} [skip ci]`,
             content: Buffer.from(JSON.stringify(config, null, 2) + '\n').toString('base64'), sha: cur.sha,
           }) });
           break;

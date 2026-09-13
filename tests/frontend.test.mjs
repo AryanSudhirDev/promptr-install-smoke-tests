@@ -53,18 +53,22 @@ async function dashboard({ blockedStorage = false, stored = {} } = {}) {
   let timerId = 0;
   const state = {
     failures: new Set(), holds: new Map(), http: new Map(),
-    status: { updatedAt: iso(0), github: { day: '2026-09-06', countsComplete: true, dailyTotal: 42, checksToday: 8, failedToday: 0, runsToday: 4, lastRunAt: iso(-60000) }, imac: { dailyTotal: 13 }, openvsx: { downloadCount: 1000, version: '1' } },
+    status: { updatedAt: iso(0), github: { day: '2026-09-06', countsComplete: true, dailyTotal: 42, checksToday: 8, failedToday: 0, runsToday: 4, lastRunAt: iso(-60000) }, imac: { dailyTotal: 13, targets: { promptr: 13, cognispec: 5 } }, cognispec: { dailyTotal: 5 }, extensions: { promptr: { downloadCount: 1000, version: '1' }, cognispec: { downloadCount: 200, version: '3' } }, openvsx: { downloadCount: 1000, version: '1' } },
     live: { downloadCount: 900, version: '2', reviewCount: 3 },
+    liveCognispec: { downloadCount: 190, version: '4', reviewCount: 1 },
     history: [{ at: iso(-86400000), downloadCount: 1000 }, { at: iso(-60000), downloadCount: 900 }],
-    settings: { writable: true, repo: REPO, settings: { github: 50, imac: 20 } },
+    historyCognispec: [{ at: iso(-86400000), downloadCount: 200 }, { at: iso(-60000), downloadCount: 190 }],
+    settings: { writable: true, repo: REPO, settings: { github: 50, imac: 20, cognispec: 5 } },
     postResponse: null
   };
-  const route = (url, options) => options.method === 'POST' ? 'post' : url.includes('status.json') ? 'status' : url.includes('downloads.jsonl') ? 'history' : url.includes('open-vsx.org') ? 'live' : 'settings';
+  const route = (url, options) => options.method === 'POST' ? 'post' : url.includes('status.json') ? 'status' : url.includes('downloads') ? 'history' : url.includes('open-vsx.org') ? 'live' : 'settings';
   async function fetch(url, options) {
     const kind = route(url, options);
     calls.push({ url, options, kind });
     // Capture the response at request start to model stale reads racing a write.
-    const value = structuredClone(state[kind]);
+    let value = structuredClone(state[kind]);
+    if (kind === 'live' && url.includes('cognispec')) value = structuredClone(state.liveCognispec);
+    if (kind === 'history' && url.includes('cognispec')) value = structuredClone(state.historyCognispec);
     if (state.holds.has(kind)) await state.holds.get(kind).promise;
     if (state.failures.has(kind)) throw new Error(kind + ' unavailable');
     if (state.http.has(kind)) return { ok: false, status: state.http.get(kind), json: async () => { throw new Error('must not parse failed HTTP'); } };
@@ -98,11 +102,11 @@ function key(d) { d.el('token').value = 'test-dashboard-key'; d.run('saveToken()
 
 test('startup reads each source once; simultaneous refreshes do not overlap', async () => {
   const d = await dashboard();
-  assert.deepEqual(d.calls.map(c => c.kind).sort(), ['history', 'live', 'settings', 'status']);
+  assert.deepEqual(d.calls.map(c => c.kind).sort(), ['history', 'history', 'live', 'live', 'settings', 'status']);
   const hold = deferred(); d.state.holds.set('live', hold);
   const start = d.calls.length;
   const one = d.refresh(), two = d.refresh();
-  assert.equal(d.calls.length - start, 4);
+  assert.equal(d.calls.length - start, 6);
   assert.equal(d.el('refresh').disabled, true);
   hold.resolve(); await Promise.all([one, two]);
   assert.equal(d.el('refresh').disabled, false);
@@ -113,7 +117,7 @@ test('source failures are independent and explicitly mark cached data', async ()
   const d = await dashboard();
   d.state.failures.add('status');
   const count = d.calls.length; await d.refresh();
-  assert.equal(d.calls.length - count, 4);
+  assert.equal(d.calls.length - count, 6);
   assert.match(d.el('stamp').textContent, /Registry observed/);
   for (const source of ['history', 'live']) d.state.failures.add(source);
   await d.refresh();
@@ -125,11 +129,11 @@ test('source failures are independent and explicitly mark cached data', async ()
 
 test('authoritative settings override snapshots while dirty inputs survive refresh', async () => {
   const d = await dashboard();
-  assert.equal(d.el('combined').textContent, '70');
+  assert.equal(d.el('combined').textContent, '75');
   assert.equal(d.el('gh-total').value, '50');
   enter(d, 'gh-total', '77'); await d.refresh();
   assert.equal(d.el('gh-total').value, '77');
-  assert.equal(d.el('combined').textContent, '70');
+  assert.equal(d.el('combined').textContent, '75');
 });
 
 test('save locks both controls, deduplicates writes, updates labels, and awaits confirmation', async () => {
@@ -138,10 +142,11 @@ test('save locks both controls, deduplicates writes, updates labels, and awaits 
   const save = d.run('save("github")');
   assert.equal(d.el('gh-save').disabled, true);
   assert.equal(d.el('im-total').disabled, true);
+  assert.equal(d.el('cs-total').disabled, true);
   await d.run('save("github")');
   assert.equal(d.calls.filter(c => c.kind === 'post').length, 1);
   hold.resolve(); await save;
-  assert.equal(d.el('combined').textContent, '97');
+  assert.equal(d.el('combined').textContent, '102');
   assert.match(d.el('gh-need').textContent, /awaiting server confirmation/);
   d.state.settings.settings.github = null; await d.refresh();
   assert.equal(d.el('gh-total').value, '77');
@@ -156,7 +161,7 @@ test('settings read begun before a save cannot roll back its accepted value', as
   const hold = deferred(); d.state.holds.set('settings', hold);
   const refresh = d.refresh(); await d.run('save("github")');
   hold.resolve(); await refresh;
-  assert.equal(d.el('combined').textContent, '97');
+  assert.equal(d.el('combined').textContent, '102');
   assert.equal(d.run('pending.github.value'), 77);
 });
 
@@ -232,6 +237,7 @@ test('incomplete publisher counts remain unknown, with UTC day and no healthy iM
   assert.doesNotMatch(d.el('gh-dot').className, /\bok\b/);
   assert.doesNotMatch(d.el('im-dot').className, /\bok\b/);
   assert.match(d.el('im-stats').textContent, /Health unknown/);
+  assert.match(d.el('cs-stats').textContent, /Health unknown/);
   assert.match(d.el('gh-stats').textContent, /UTC/);
 });
 
@@ -276,4 +282,22 @@ test('Pacific timestamps switch automatically between daylight and standard time
   const d = await dashboard();
   assert.match(d.run("when('2026-09-05T12:00:00Z')"), /05:00 AM PDT/);
   assert.match(d.run("when('2026-01-05T12:00:00Z')"), /04:00 AM PST/);
+});
+test('Cognispec counter, settings card, and history are independently rendered', async () => {
+  const d = await dashboard();
+  assert.equal(d.el('cog-dl').textContent, '190');
+  assert.match(d.el('cog-ver').textContent, /v4/);
+  assert.equal(d.el('cs-total').value, '5');
+  assert.equal(d.el('combined').textContent, '75');
+  assert.match(d.el('chart-note').textContent, /Promptr/);
+  d.run('selectChart("cognispec")');
+  assert.match(d.el('chart-note').textContent, /Cognispec/);
+  assert.equal(d.el('show-cognispec').getAttribute('aria-pressed'), 'true');
+  assert.ok(d.run('chartPoints.some(p => p.label.includes("190"))'));
+});
+test('Cognispec setting saves through the same key-protected API', async () => {
+  const d = await dashboard(); key(d); enter(d, 'cs-total', '1189'); await d.run('save("cognispec")');
+  assert.equal(d.calls.filter(c => c.kind === 'post').length, 1);
+  assert.deepEqual(JSON.parse(d.calls.find(c => c.kind === 'post').options.body), {target:'cognispec', total:1189});
+  assert.match(d.el('cs-msg').textContent, /Accepted/);
 });

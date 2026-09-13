@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>Promptr install monitors</title>
+<title>Extension install monitors</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -38,8 +38,8 @@
   .card h2 { font-size:14px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
   .where { color:var(--dim); font-size:12px; margin-bottom:12px; }
   @media (min-width: 1180px) {
-    .c-gh, .c-im { grid-column: span 3; }
-    .c-sum { grid-column: span 6; }
+    .c-gh, .c-im, .c-cog { grid-column: span 4; }
+    .c-sum { grid-column: span 12; }
     .c-chart { grid-column: span 8; }
     .c-proj { grid-column: span 4; }
     .c-token { grid-column: span 12; }
@@ -89,6 +89,14 @@
          box-shadow:0 8px 28px rgba(0,0,0,.35); max-width:min(330px, 85vw); white-space:pre-line; }
   .tip .tip-n { font-weight:650; font-variant-numeric:tabular-nums; }
   .tip .tip-s { color:var(--dim); font-size:12px; }
+  .ext-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:10px; }
+  .ext-metric { min-width:0; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--bg); }
+  .ext-metric h3 { margin:0 0 4px; font-size:14px; }
+  .ext-metric h3 span { color:var(--dim); font-size:12px; font-weight:400; }
+  .ext-metric .headline { gap:8px; }
+  .ext-metric .big { font-size:clamp(24px, 2.8vw, 34px); }
+  .chart-switch { margin:10px 0 2px; }
+  .chart-switch button.active { background:var(--accent); color:#fff; }
   #chart, #bars { touch-action:pan-y; cursor:crosshair; }
   svg:focus-visible { outline:2px solid var(--accent); outline-offset:4px; border-radius:8px; }
   a { color:var(--accent); }
@@ -97,15 +105,15 @@
 <body>
   <header>
     <div>
-      <h1>Promptr install monitors</h1>
-      <div class="sub">Clean-install checks of the published extension (<span id="ver">…</span>). Checks attempt to download from Open VSX.</div>
+      <h1>Extension install monitors</h1>
+      <div class="sub">Fresh-install QA for Promptr and Cognispec. Each check attempts a new download from Open VSX.</div>
     </div>
     <button id="refresh" onclick="refreshLive()">Refresh now</button>
   </header>
 
   <div class="layout">
     <div class="card c-gh">
-      <h2><span class="dot" id="gh-dot"></span> GitHub monitor</h2>
+      <h2><span class="dot" id="gh-dot"></span> GitHub monitor · Promptr</h2>
       <div class="where">Fresh Ubuntu VM per check · cloud IPs · slots :07 / :37</div>
       <label for="gh-total">Checks per day</label>
       <div class="row">
@@ -118,8 +126,8 @@
     </div>
 
     <div class="card c-im">
-      <h2><span class="dot" id="im-dot"></span> iMac monitor</h2>
-      <div class="where">Fresh container per check · every 5 minutes · 3 concurrent max</div>
+      <h2><span class="dot" id="im-dot"></span> iMac monitor · Promptr</h2>
+      <div class="where">Fresh container per check · every 5 minutes · shared 3 concurrent max</div>
       <label for="im-total">Checks per day</label>
       <div class="row">
         <input type="number" id="im-total" min="1" max="8000" inputmode="numeric" />
@@ -130,20 +138,45 @@
       <div class="stats" id="im-stats">reads its setting from the repo each run</div>
     </div>
 
+    <div class="card c-cog">
+      <h2><span class="dot" id="cs-dot"></span> iMac monitor · Cognispec</h2>
+      <div class="where">Fresh container per check · shared limiter and 3 concurrent max</div>
+      <label for="cs-total">Checks per day</label>
+      <div class="row">
+        <input type="number" id="cs-total" min="0" max="8000" inputmode="numeric" />
+        <button id="cs-save" onclick="save('cognispec')">Save</button>
+      </div>
+      <div class="msg" role="status" aria-live="polite" id="cs-msg"></div>
+      <div class="where" id="cs-need" style="margin:0"></div>
+      <div class="stats" id="cs-stats">reads its setting from the repo each run</div>
+    </div>
+
     <div class="card c-sum">
       <h2>Open VSX downloads</h2>
-      <div class="where">Public registry counter, including monitoring and other sources.</div>
-      <div class="headline">
-        <span class="big" id="dl">—</span>
-        <span id="stamp" style="color:var(--dim);font-size:12px"></span>
+      <div class="where">Public registry counters, including monitoring and other sources.</div>
+      <div class="ext-grid">
+        <section class="ext-metric" aria-labelledby="promptr-count-label">
+          <h3 id="promptr-count-label">Promptr <span id="ver">…</span></h3>
+          <div class="headline"><span class="big" id="dl">—</span><span id="stamp" style="color:var(--dim);font-size:12px"></span></div>
+          <div class="where" id="extra" style="margin:6px 0 0"></div>
+        </section>
+        <section class="ext-metric" aria-labelledby="cognispec-count-label">
+          <h3 id="cognispec-count-label">Cognispec <span id="cog-ver">…</span></h3>
+          <div class="headline"><span class="big" id="cog-dl">—</span><span id="cog-stamp" style="color:var(--dim);font-size:12px"></span></div>
+          <div class="where" id="cog-extra" style="margin:6px 0 0"></div>
+        </section>
       </div>
-      <div class="where" id="extra" style="margin:6px 0 0"></div>
-      <div class="stats">Combined <b id="combined">—</b> checks/day configured · GitHub passed today (UTC): <b id="today">—</b></div>
+      <div class="stats">Combined <b id="combined">—</b> checks/day configured · GitHub Promptr passed today (UTC): <b id="today">—</b></div>
     </div>
 
     <div class="card c-chart">
       <h2>Download progression</h2>
       <div class="where">Pacific time (PDT/PST) · Hover, touch, or use arrow keys to explore.</div>
+      <div class="row chart-switch" role="group" aria-label="Choose extension history">
+        <span class="where" style="margin:0">Showing:</span>
+        <button class="secondary active" id="show-promptr" onclick="selectChart('promptr')" aria-pressed="true">Promptr</button>
+        <button class="secondary" id="show-cognispec" onclick="selectChart('cognispec')" aria-pressed="false">Cognispec</button>
+      </div>
       <div id="win" class="winrow"></div>
       <svg id="chart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
       <div class="where" id="chart-note" style="margin:6px 0 0"></div>
@@ -176,18 +209,21 @@
 
   <div class="foot">
     Accepted settings are used by subsequent scheduled runs; scheduling and execution can be delayed.
-    GitHub's number is a repo variable; the iMac reads <code>monitor-config.json</code> from the repo each run.
+    GitHub Promptr's number is a repo variable; the iMac reads both target settings from <code>monitor-config.json</code> each run.
     <a href="https://github.com/AryanSudhirDev/promptr-install-smoke-tests" target="_blank" rel="noopener">repo</a>
   </div>
 
 <script>
-
 const REPO = 'AryanSudhirDev/promptr-install-smoke-tests';
-// Never select a credential destination from the current hostname or API availability.
 const API = 'https://promptr-qa-dashboard.vercel.app/api/settings';
+const EXTENSIONS = {
+  promptr: {label: 'Promptr', api: 'https://open-vsx.org/api/aryansudhir/promptr', history: 'downloads.jsonl', liveKey: 'promptr_qa_live_points', metaKey: 'promptr_qa_live_meta'},
+  cognispec: {label: 'Cognispec', api: 'https://open-vsx.org/api/aryansudhir/cognispec', history: 'downloads-cognispec.jsonl', liveKey: 'promptr_qa_cognispec_live_points', metaKey: 'promptr_qa_cognispec_live_meta'},
+};
+const SETTINGS_TARGETS = ['github', 'imac', 'cognispec'];
 const RAW = file => 'https://raw.githubusercontent.com/' + REPO + '/data/' + file + '?t=' + Date.now();
 const $ = id => document.getElementById(id);
-const KEY_STORE = 'promptr_qa_dash_key', LIVE_KEY = 'promptr_qa_live_points', META_KEY = 'promptr_qa_live_meta';
+const KEY_STORE = 'promptr_qa_dash_key';
 const memory = new Map();
 let persistentStorage = true;
 const storage = {
@@ -195,12 +231,12 @@ const storage = {
   set(key, value) { memory.set(key, value); try { localStorage.setItem(key, value); } catch { persistentStorage = false; } },
   remove(key) { memory.set(key, null); try { localStorage.removeItem(key); } catch { persistentStorage = false; } }
 };
-// Retire the old browser GitHub credential without reading or reusing it.
 storage.remove('promptr_qa_token');
 const dashboardKey = () => { const key = storage.get(KEY_STORE); return typeof key === 'string' && !/^(github_pat_|gh[pousr]_)/i.test(key.trim()) ? key.trim() : ''; };
 const readJSON = key => { try { return JSON.parse(storage.get(key)); } catch { return null; } };
 const count = n => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
-const rate = (n, target = 'imac') => count(n) !== null && n >= 1 && n <= (target === 'github' ? 1000 : 8000) ? n : null;
+const rate = (n, target = 'imac') => count(n) !== null && n >= (target === 'cognispec' ? 0 : 1) && n <= (target === 'github' ? 1000 : 8000) ? n : null;
+const range = target => target === 'github' ? '1 to 1000' : target === 'cognispec' ? '0 to 8000' : '1 to 8000';
 const timestamp = value => {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const n = Date.parse(value); return Number.isFinite(n) && n <= Date.now() + 60000 ? n : null;
@@ -209,15 +245,16 @@ const fmt = n => n === null ? 'unknown' : n.toLocaleString();
 const when = value => { const t = timestamp(value); return t === null ? 'unknown' : new Date(t).toLocaleString('en-US', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Los_Angeles', timeZoneName:'short'}); };
 const point = p => p && timestamp(p.at) !== null && count(p.downloadCount) !== null ? {at:new Date(timestamp(p.at)).toISOString(), downloadCount:p.downloadCount, approx:p.approx === true, live:p.live === true} : null;
 const points = list => Array.isArray(list) ? list.map(point).filter(Boolean) : [];
-const livePoints = () => points(readJSON(LIVE_KEY));
-function addLivePoint(p) {
-  // Keep unchanged observations: moving an old point would erase the plateau's start.
-  const kept = livePoints().filter(x => timestamp(x.at) >= Date.now() - 45 * 86400000);
-  kept.push(p); storage.set(LIVE_KEY, JSON.stringify(kept.slice(-600)));
+const liveMeta = {};
+for (const [key, extension] of Object.entries(EXTENSIONS)) { const candidate = readJSON(extension.metaKey); liveMeta[key] = point(candidate); }
+function livePoints(target = 'promptr') { return points(readJSON(EXTENSIONS[target]?.liveKey)); }
+function addLivePoint(p, target = 'promptr') {
+  if (!EXTENSIONS[target]) return;
+  const kept = livePoints(target).filter(x => timestamp(x.at) >= Date.now() - 45 * 86400000);
+  kept.push(p); storage.set(EXTENSIONS[target].liveKey, JSON.stringify(kept.slice(-600)));
 }
 async function request(url, options = {}, kind = 'json') {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const r = await fetch(url, {...options, signal:controller.signal, cache:'no-store', credentials:'omit', redirect:'error'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -226,26 +263,24 @@ async function request(url, options = {}, kind = 'json') {
   finally { clearTimeout(timeout); }
 }
 let serverWritable = false, saving = false, refreshing = null, revision = 0;
-let statusData = null, branchPoints = [], historyFailed = false, statusFailed = false, liveFailed = true;
-let invalidHistoryRows = 0;
-let liveMeta = readJSON(META_KEY);
-if (!point(liveMeta)) liveMeta = null;
-const settings = {github:null, imac:null};
-const authoritative = {github:false, imac:false};
-const pending = {github:null, imac:null};
-const dirty = {github:false, imac:false};
-const prefix = target => target === 'github' ? 'gh' : 'im';
+let statusData = null, branchPoints = {promptr: [], cognispec: []};
+let historyFailed = {promptr: false, cognispec: false}, liveFailed = {promptr: true, cognispec: true}, statusFailed = true;
+let invalidHistoryRows = {promptr: 0, cognispec: 0};
+const settings = {github:null, imac:null, cognispec:null};
+const authoritative = {github:false, imac:false, cognispec:false};
+const pending = {github:null, imac:null, cognispec:null};
+const dirty = {github:false, imac:false, cognispec:false};
+const prefix = target => target === 'github' ? 'gh' : target === 'imac' ? 'im' : 'cs';
 function renderSettings() {
-  for (const target of ['github','imac']) {
+  for (const target of SETTINGS_TARGETS) {
     const id = prefix(target), value = settings[target];
     if (!dirty[target] && !saving) $(id + '-total').value = value === null ? '' : value;
-    $(id + '-need').textContent = 'Configured: ' + fmt(value) + '/day' + (pending[target] ? ' (accepted, awaiting server confirmation)' : authoritative[target] ? ' (server setting)' : ' (published snapshot)');
+    $(id + '-need').textContent = 'Configured: ' + fmt(value) + '/day' + (target === 'cognispec' && value === 0 ? ' (disabled)' : '') + (pending[target] ? ' (accepted, awaiting server confirmation)' : authoritative[target] ? ' (server setting)' : ' (published snapshot)');
     $(id + '-save').disabled = saving || !serverWritable;
     $(id + '-total').disabled = saving;
   }
-  $('combined').textContent = settings.github === null || settings.imac === null ? 'unknown' : fmt(settings.github + settings.imac);
-  $('im-dot').className = 'dot';
-  $('im-stats').textContent = (settings.imac === null ? '' : '288 slots/day; ' + Math.floor(settings.imac / 288) + '–' + Math.ceil(settings.imac / 288) + ' checks/slot at this setting. ') + 'Health unknown. Configuration is not proof of execution; per-check status is available only on the iMac’s local dashboard.';
+  const values = SETTINGS_TARGETS.map(target => settings[target]);
+  $('combined').textContent = values.some(value => value === null) ? 'unknown' : fmt(values.reduce((sum, value) => sum + value, 0));
 }
 function refreshTokenUi() {
   renderSettings();
@@ -261,13 +296,13 @@ function saveToken() {
 }
 function clearToken() { storage.remove(KEY_STORE); $('token').value = ''; $('tok-msg').textContent = 'Dashboard key cleared.'; refreshTokenUi(); }
 async function save(target) {
-  if (!['github','imac'].includes(target) || saving) return;
+  if (!SETTINGS_TARGETS.includes(target) || saving) return;
   const id = prefix(target), msg = $(id + '-msg');
   if (!serverWritable) { msg.textContent = 'Settings service unavailable. Refresh to retry; no fallback writes are allowed.'; return; }
   const key = dashboardKey();
   if (!key) { $('tokbox').open = true; $('token').focus(); msg.textContent = 'Enter a dashboard key below.'; return; }
   const value = $(id + '-total').value.trim(), n = Number(value);
-  if (!value || rate(n, target) === null) { msg.textContent = 'Enter a whole number from 1 to ' + (target === 'github' ? 1000 : 8000) + '.'; return; }
+  if (!value || rate(n, target) === null) { msg.textContent = 'Enter a whole number from ' + range(target) + '.' + (target === 'cognispec' ? ' Use 0 to disable checks.' : ''); return; }
   saving = true; revision++; refreshTokenUi(); msg.className = 'msg'; msg.textContent = 'Saving…';
   try {
     const j = await request(API, {method:'POST', headers:{'Content-Type':'application/json','x-dash-key':key}, body:JSON.stringify({target,total:n})});
@@ -282,12 +317,11 @@ function applySettings(j, readRevision) {
   if (!j || j.repo !== REPO || typeof j.writable !== 'boolean') throw new Error('unexpected settings service');
   serverWritable = j.writable;
   if (saving || revision !== readRevision) return;
-  for (const target of ['github','imac']) {
+  for (const target of SETTINGS_TARGETS) {
     if (!j.settings || !Object.prototype.hasOwnProperty.call(j.settings, target)) continue;
-    const value = rate(j.settings[target], target);
-    authoritative[target] = true;
+    const value = rate(j.settings[target], target); authoritative[target] = true;
     if (pending[target]) {
-      if (value === null) continue; // partial server failure cannot undo an accepted write
+      if (value === null) continue;
       if (value === pending[target].value) $(prefix(target) + '-msg').textContent = 'Saved and confirmed: ' + value + '/day.';
       else $(prefix(target) + '-msg').textContent = 'Fresh server setting is ' + value + '/day (changed since this save).';
       pending[target] = null;
@@ -304,135 +338,66 @@ function renderStatus() {
   $('gh-stats').textContent = (stale ? 'Stale/unavailable snapshot. ' : 'Published snapshot. ') + 'GitHub UTC day of snapshot: ' + fmt(count(g.checksToday)) + ' passed, ' + fmt(failures) + ' failed; ' + fmt(count(g.runsToday)) + ' runs. Last run: ' + when(g.lastRunAt) + '. Updated: ' + when(statusData?.updatedAt) + '.';
   const sameDay = updated !== null && (g.day || new Date(updated).toISOString().slice(0,10)) === new Date().toISOString().slice(0,10);
   $('today').textContent = !stale && sameDay && g.countsComplete !== false ? fmt(count(g.checksToday)) : 'unknown (stale snapshot)';
-  for (const target of ['github','imac']) if (!authoritative[target] && !pending[target]) settings[target] = rate(statusData?.[target]?.dailyTotal, target);
+  const imacNote = 'Health unknown. Execution telemetry is local to the iMac; this card shows configuration only.';
+  $('im-dot').className = 'dot'; $('im-stats').textContent = (settings.imac === null ? '' : '288 slots/day; ' + Math.floor(settings.imac / 288) + '–' + Math.ceil(settings.imac / 288) + ' checks/slot at this setting. ') + imacNote;
+  $('cs-dot').className = 'dot'; $('cs-stats').textContent = (settings.cognispec === null ? '' : '288 slots/day; ' + Math.floor(settings.cognispec / 288) + '–' + Math.ceil(settings.cognispec / 288) + ' checks/slot at this setting. ') + imacNote;
+  for (const target of SETTINGS_TARGETS) if (!authoritative[target] && !pending[target]) {
+    const snapshot = target === 'imac' ? statusData?.imac?.dailyTotal : target === 'cognispec' ? statusData?.cognispec?.dailyTotal : statusData?.github?.dailyTotal;
+    settings[target] = rate(snapshot, target);
+  }
 }
-async function fetchLive() {
-  const j = await request('https://open-vsx.org/api/aryansudhir/promptr?cb=' + Date.now());
+function publishedFor(target) {
+  const item = statusData?.extensions?.[target] || (target === 'promptr' ? statusData?.openvsx : null);
+  return item ? point({at: statusData?.updatedAt, downloadCount: item.downloadCount}) : null;
+}
+async function fetchLive(target = 'promptr') {
+  const j = await request(EXTENSIONS[target].api + '?cb=' + Date.now());
   if (count(j?.downloadCount) === null) throw new Error('invalid registry count');
   const meta = {at:new Date().toISOString(), downloadCount:j.downloadCount, version:typeof j.version === 'string' ? j.version.slice(0,100) : null,
     reviewCount:count(j.reviewCount), averageRating:typeof j.averageRating === 'number' && Number.isFinite(j.averageRating) && j.averageRating >= 0 && j.averageRating <= 5 ? j.averageRating : null};
-  liveMeta = meta; storage.set(META_KEY, JSON.stringify(meta)); addLivePoint({...point(meta), live:true});
+  liveMeta[target] = meta; storage.set(EXTENSIONS[target].metaKey, JSON.stringify(meta)); addLivePoint({...point(meta), live:true}, target);
 }
-function renderCount() {
-  const published = point({at:statusData?.updatedAt, downloadCount:statusData?.openvsx?.downloadCount});
-  const useLive = liveMeta && (!published || timestamp(liveMeta.at) >= timestamp(published.at));
-  const src = useLive ? liveMeta : published;
-  $('dl').textContent = src ? fmt(src.downloadCount) : 'unknown';
-  const version = useLive ? liveMeta.version : statusData?.openvsx?.version;
-  $('ver').textContent = typeof version === 'string' ? 'v' + version.slice(0,100) : 'unknown version';
-  $('stamp').textContent = (liveFailed ? 'Live refresh failed. ' : '') + (!src ? 'No valid reading available.' : (liveFailed ? 'Cached reading' : useLive ? 'Registry observed' : 'Published reading') + ': ' + when(src.at));
-  $('extra').textContent = useLive && count(liveMeta.reviewCount) !== null ? fmt(liveMeta.reviewCount) + ' reviews' : '';
+function renderCount(target) {
+  const extension = EXTENSIONS[target], published = publishedFor(target), live = liveMeta[target];
+  const useLive = live && (!published || timestamp(live.at) >= timestamp(published.at));
+  const src = useLive ? live : published, id = target === 'promptr' ? '' : 'cog-';
+  $(id + 'dl').textContent = src ? fmt(src.downloadCount) : 'unknown';
+  const version = useLive ? live.version : published?.version;
+  $(id + 'ver').textContent = typeof version === 'string' ? 'v' + version.slice(0,100) : 'unknown version';
+  const failed = liveFailed[target];
+  $(id + 'stamp').textContent = (failed ? 'Live refresh failed. ' : '') + (!src ? 'No valid reading available.' : (failed ? 'Cached reading' : useLive ? 'Registry observed' : 'Published reading') + ': ' + when(src.at));
+  $(id + 'extra').textContent = useLive && count(live.reviewCount) !== null ? fmt(live.reviewCount) + ' reviews' : '';
 }
-let chartPoints = [], barPoints = [], drawnPoints = [];
+function renderCounts() { for (const target of Object.keys(EXTENSIONS)) renderCount(target); }
+let chartTarget = 'promptr', chartPoints = [], barPoints = [], drawnPoints = [];
 const chartWidths = {chart:800, bars:800};
+function mergePoints(target) {
+  const seen = new Set(), list = [...branchPoints[target], ...livePoints(target)]; const published = publishedFor(target); if (published) list.push(published);
+  return list.map(point).filter(Boolean).sort((a,b)=>timestamp(a.at)-timestamp(b.at)).filter(p=>{const key=p.at+':'+p.downloadCount;if(seen.has(key))return false;seen.add(key);return true;});
+}
 function hideTip() { $('tip').style.display = 'none'; $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); }
-function showTip(text, x, y) {
-  const tip = $('tip'); tip.textContent = text; tip.style.display = 'block';
-  const r = tip.getBoundingClientRect();
-  tip.style.left = Math.max(8, Math.min(x + 10, innerWidth - r.width - 8)) + 'px';
-  tip.style.top = Math.max(8, Math.min(y - r.height - 10, innerHeight - r.height - 8)) + 'px';
-}
+function showTip(text, x, y) { const tip=$('tip'); tip.textContent=text; tip.style.display='block'; const r=tip.getBoundingClientRect(); tip.style.left=Math.max(8,Math.min(x+10,innerWidth-r.width-8))+'px'; tip.style.top=Math.max(8,Math.min(y-r.height-10,innerHeight-r.height-8))+'px'; }
 function attachChart(id, getPoints) {
-  const svg = $(id); let index = 0;
-  svg.setAttribute('tabindex','0'); svg.setAttribute('role','img');
-  svg.setAttribute('aria-label', id === 'chart' ? 'Counter observations. Use left and right arrows to inspect readings.' : 'Observed changes by Pacific capture hour. Missing hours are unknown. Use left and right arrows.');
-  svg.setAttribute('aria-describedby','tip');
-  function show(i, x, y) { const ps = getPoints(); if (!ps.length) { hideTip(); return; } index = Math.max(0,Math.min(i,ps.length-1)); const p = ps[index], r = svg.getBoundingClientRect(); if (id === 'chart') { $('guide')?.setAttribute('x1',p.x); $('guide')?.setAttribute('x2',p.x); $('guide')?.setAttribute('opacity','1'); $('marker')?.setAttribute('cx',p.x); $('marker')?.setAttribute('cy',p.y); $('marker')?.setAttribute('opacity','1'); } else { $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); } showTip(p.label, x ?? r.left + p.x / chartWidths[id] * r.width, y ?? r.top + r.height / 2); }
-  svg.addEventListener('pointermove', e => { const ps = getPoints(), r = svg.getBoundingClientRect(); if (!ps.length || !r.width) return; const x = (e.clientX-r.left)/r.width*chartWidths[id]; let best=0; ps.forEach((p,i) => { if (Math.abs(p.x-x)<Math.abs(ps[best].x-x)) best=i; }); show(best,e.clientX,e.clientY); });
-  svg.addEventListener('pointerleave',hideTip); svg.addEventListener('blur',hideTip); svg.addEventListener('focus',()=>show(index));
-  svg.addEventListener('keydown',e=>{ if (!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key)) return; e.preventDefault(); if(e.key==='Escape') hideTip(); else show(e.key==='Home'?0:e.key==='End'?getPoints().length-1:index+(e.key==='ArrowLeft'?-1:1)); });
+  const svg=$(id);let index=0;svg.setAttribute('tabindex','0');svg.setAttribute('role','img');svg.setAttribute('aria-label',id==='chart'?'Counter observations. Use left and right arrows to inspect readings.':'Observed changes by Pacific capture hour. Missing hours are unknown. Use left and right arrows.');svg.setAttribute('aria-describedby','tip');
+  function show(i,x,y){const ps=getPoints();if(!ps.length){hideTip();return;}index=Math.max(0,Math.min(i,ps.length-1));const p=ps[index],r=svg.getBoundingClientRect();if(id==='chart'){$('guide')?.setAttribute('x1',p.x);$('guide')?.setAttribute('x2',p.x);$('guide')?.setAttribute('opacity','1');$('marker')?.setAttribute('cx',p.x);$('marker')?.setAttribute('cy',p.y);$('marker')?.setAttribute('opacity','1');}else{$('guide')?.setAttribute('opacity','0');$('marker')?.setAttribute('opacity','0');}showTip(p.label,x??r.left+p.x/chartWidths[id]*r.width,y??r.top+r.height/2);}
+  svg.addEventListener('pointermove',e=>{const ps=getPoints(),r=svg.getBoundingClientRect();if(!ps.length||!r.width)return;const x=(e.clientX-r.left)/r.width*chartWidths[id];let best=0;ps.forEach((p,i)=>{if(Math.abs(p.x-x)<Math.abs(ps[best].x-x))best=i;});show(best,e.clientX,e.clientY);});svg.addEventListener('pointerleave',hideTip);svg.addEventListener('blur',hideTip);svg.addEventListener('focus',()=>show(index));svg.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key))return;e.preventDefault();if(e.key==='Escape')hideTip();else show(e.key==='Home'?0:e.key==='End'?getPoints().length-1:index+(e.key==='ArrowLeft'?-1:1));});
 }
-function drawHistory(pts) {
-  drawnPoints=pts; chartPoints=[]; barPoints=[]; hideTip(); $('win').replaceChildren(); $('bars').replaceChildren();
-  const note=(historyFailed?'History refresh failed; cached readings. ':'')+pts.length+' readings · Dashed lines bridge unobserved gaps. Grey bars: no reading. Amber bars: change spans a gap. Changes use the later capture hour.'+(invalidHistoryRows?' '+invalidHistoryRows+' invalid rows skipped.':'');
-  $('chart-note').textContent=note;
-  const W=Math.max(280,$('chart').getBoundingClientRect().width||800), H=260, left=52,right=W-16,top=18,bottom=210;
-  chartWidths.chart=W; $('chart').setAttribute('viewBox','0 0 '+W+' '+H);
-  if(!pts.length){$('chart').innerHTML='<text x="16" y="50" fill="var(--dim)" font-size="13">Waiting for observations</text>';return;}
-  const xs=pts.map(p=>timestamp(p.at)),ys=pts.map(p=>p.downloadCount),x0=xs[0],x1=xs.at(-1);
-  let lo=ys[0],hi=ys[0];for(const n of ys){lo=Math.min(lo,n);hi=Math.max(hi,n);}
-  const rough=Math.max(1,(hi-lo)/4),power=10**Math.floor(Math.log10(rough)),fraction=rough/power;
-  const step=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power;
-  let y0=Math.max(0,Math.floor(lo/step)*step),y1=Math.ceil(hi/step)*step;
-  if(y0===y1){y0=Math.max(0,y0-step);y1+=step;}
-  const px=t=>x0===x1?(left+right)/2:left+(t-x0)/(x1-x0)*(right-left),py=n=>bottom-(n-y0)/(y1-y0)*(bottom-top);
-  const shortTime=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
-  const shortDate=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric'});
-  let html='';
+function drawHistory(pts,target=chartTarget) {
+  drawnPoints=pts;chartPoints=[];barPoints=[];hideTip();$('win').replaceChildren();$('bars').replaceChildren();const label=EXTENSIONS[target]?.label||target;
+  const note=(historyFailed[target]?'History refresh failed; cached readings. ':'')+label+': '+pts.length+' readings · Dashed lines bridge unobserved gaps. Grey bars: no reading. Amber bars: change spans a gap. Changes use the later capture hour.'+(invalidHistoryRows[target]?' '+invalidHistoryRows[target]+' invalid rows skipped.':'');$('chart-note').textContent=note;
+  const W=Math.max(280,$('chart').getBoundingClientRect().width||800),H=260,left=52,right=W-16,top=18,bottom=210;chartWidths.chart=W;$('chart').setAttribute('viewBox','0 0 '+W+' '+H);if(!pts.length){$('chart').innerHTML='<text x="16" y="50" fill="var(--dim)" font-size="13">Waiting for observations</text>';return;}
+  const xs=pts.map(p=>timestamp(p.at)),ys=pts.map(p=>p.downloadCount),x0=xs[0],x1=xs.at(-1);let lo=ys[0],hi=ys[0];for(const n of ys){lo=Math.min(lo,n);hi=Math.max(hi,n);}const rough=Math.max(1,(hi-lo)/4),power=10**Math.floor(Math.log10(rough)),fraction=rough/power,step=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power;let y0=Math.max(0,Math.floor(lo/step)*step),y1=Math.ceil(hi/step)*step;if(y0===y1){y0=Math.max(0,y0-step);y1+=step;}const px=t=>x0===x1?(left+right)/2:left+(t-x0)/(x1-x0)*(right-left),py=n=>bottom-(n-y0)/(y1-y0)*(bottom-top);const shortTime=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'}),shortDate=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric'});let html='';
   for(let n=y0;n<=y1+step/2;n+=step){const y=py(n);html+='<line x1="'+left+'" x2="'+right+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(left-10)+'" y="'+(y+4)+'" text-anchor="end" fill="var(--dim)" font-size="11">'+fmt(n)+'</text>';}
-  let solid='',gaps='';
-  pts.forEach((p,i)=>{
-    const x=px(xs[i]),y=py(ys[i]),gap=i>0&&xs[i]-xs[i-1]>90*60000;
-    solid+=(i&&!gap?' L':' M')+x+','+y;
-    if(gap)gaps+='M'+px(xs[i-1])+','+py(ys[i-1])+' L'+x+','+y+' ';
-    const delta=i?ys[i]-ys[i-1]:null;
-    chartPoints.push({x,y,label:fmt(ys[i])+' downloads\n'+when(p.at)+(delta===null?'':'\n'+(delta>=0?'+':'')+delta+' since previous reading')+(gap?'\nUnobserved gap before this reading':'')+(p.approx?'\nApproximate reading':'')});
-  });
-  html+='<path d="'+gaps+'" fill="none" stroke="var(--accent)" opacity="0.45" stroke-width="1.5" stroke-dasharray="4 5"/><path d="'+solid+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
-  html+=pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="2.5" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join('');
-  const nt=x0===x1?1:W<460?2:4;
-  for(let i=0;i<nt;i++){const t=nt===1?x0:x0+(x1-x0)*i/(nt-1),x=px(t),anchor=i===0?'start':i===nt-1?'end':'middle';html+='<text x="'+x+'" y="232" text-anchor="'+anchor+'" fill="var(--dim)" font-size="11">'+shortTime(t)+'</text><text x="'+x+'" y="248" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(t)+'</text>';}
-  html+='<line id="guide" y1="'+top+'" y2="'+bottom+'" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="marker" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>';
-  $('chart').innerHTML=html;
-  for(const [label,hours] of [['Last hour',1],['Last 6 hours',6],['Last 24 hours',24]]){
-    let base=-1;for(let i=0;i<xs.length;i++)if(xs[i]<=x1-hours*3600000)base=i;
-    const el=document.createElement('div'),strong=document.createElement('b');el.className='win';const d=base<0?null:ys.at(-1)-ys[base];strong.textContent=d===null?'Not enough data':(d>0?'+':'')+fmt(d);el.append(strong,document.createTextNode(label+' (approx.)'));el.title='Change from the nearest earlier sample, relative to the latest reading';$('win').append(el);
-  }
-  const buckets=new Map();
-  for(let i=1;i<pts.length;i++){const hour=Math.floor(xs[i]/3600000)*3600000,b=buckets.get(hour)||{count:0,gap:false};b.count+=ys[i]-ys[i-1];b.gap ||= xs[i]-xs[i-1]>90*60000;buckets.set(hour,b);}
-  const end=Math.floor(x1/3600000)*3600000,start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000),per=[];
-  for(let hour=start;hour<=end;hour+=3600000)per.push({hour,...(buckets.get(hour)||{count:null,gap:false})});
-  const BW=Math.max(280,$('bars').getBoundingClientRect().width||W),br=BW-16,bw=(br-left)/per.length;
-  chartWidths.bars=BW;$('bars').setAttribute('viewBox','0 0 '+BW+' 150');
-  const max=Math.max(1,...per.map(b=>b.count||0)),min=Math.min(0,...per.map(b=>b.count||0)),by=n=>108-(n-min)/(max-min)*88,zero=by(0);
-  let bars='<line x1="'+left+'" x2="'+br+'" y1="'+zero+'" y2="'+zero+'" stroke="var(--line)"/><text x="42" y="24" text-anchor="end" fill="var(--dim)" font-size="10">'+max+'</text>';
-  bars+=per.map((b,i)=>{const x=left+i*bw;barPoints.push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+'\n'+(b.count===null?'No observation in this hour':(b.count>=0?'+':'')+b.count+' observed change'+(b.gap?'\nSpans a gap; actual hourly activity unknown':''))});return b.count===null?'<rect x="'+(x+1)+'" y="'+(zero-2)+'" width="'+Math.max(1,bw-2)+'" height="3" rx="1" fill="var(--dim)" opacity="0.3"/>':'<rect x="'+(x+1)+'" y="'+Math.min(zero,by(b.count))+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,Math.abs(by(b.count)-zero))+'" rx="2" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'" opacity="0.85"/>';}).join('');
-  for(const i of [...new Set([0,Math.floor((per.length-1)/2),per.length-1])]){const x=left+(i+.5)*bw,anchor=i===0?'start':i===per.length-1?'end':'middle';bars+='<text x="'+x+'" y="128" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortTime(per[i].hour)+'</text><text x="'+x+'" y="143" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(per[i].hour)+'</text>';}
-  $('bars').innerHTML=bars;
+  let solid='',gaps='';pts.forEach((p,i)=>{const x=px(xs[i]),y=py(ys[i]),gap=i>0&&xs[i]-xs[i-1]>90*60000;solid+=(i&&!gap?' L':' M')+x+','+y;if(gap)gaps+='M'+px(xs[i-1])+','+py(ys[i-1])+' L'+x+','+y+' ';const delta=i?ys[i]-ys[i-1]:null;chartPoints.push({x,y,label:fmt(ys[i])+' downloads\n'+when(p.at)+(delta===null?'':'\n'+(delta>=0?'+':'')+delta+' since previous reading')+(gap?'\nUnobserved gap before this reading':'')+(p.approx?'\nApproximate reading':'')});});
+  html+='<path d="'+gaps+'" fill="none" stroke="var(--accent)" opacity="0.45" stroke-width="1.5" stroke-dasharray="4 5"/><path d="'+solid+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';html+=pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="2.5" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join('');const nt=x0===x1?1:W<460?2:4;for(let i=0;i<nt;i++){const t=nt===1?x0:x0+(x1-x0)*i/(nt-1),x=px(t),anchor=i===0?'start':i===nt-1?'end':'middle';html+='<text x="'+x+'" y="232" text-anchor="'+anchor+'" fill="var(--dim)" font-size="11">'+shortTime(t)+'</text><text x="'+x+'" y="248" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(t)+'</text>';}html+='<line id="guide" y1="'+top+'" y2="'+bottom+'" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="marker" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>';$('chart').innerHTML=html;
+  for(const [name,hours] of [['Last hour',1],['Last 6 hours',6],['Last 24 hours',24]]){let base=-1;for(let i=0;i<xs.length;i++)if(xs[i]<=x1-hours*3600000)base=i;const el=document.createElement('div'),strong=document.createElement('b');el.className='win';const d=base<0?null:ys.at(-1)-ys[base];strong.textContent=d===null?'Not enough data':(d>0?'+':'')+fmt(d);el.append(strong,document.createTextNode(name+' (approx.)'));el.title='Change from the nearest earlier sample, relative to the latest reading';$('win').append(el);}
+  const buckets=new Map();for(let i=1;i<pts.length;i++){const hour=Math.floor(xs[i]/3600000)*3600000,b=buckets.get(hour)||{count:0,gap:false};b.count+=ys[i]-ys[i-1];b.gap||=xs[i]-xs[i-1]>90*60000;buckets.set(hour,b);}const end=Math.floor(x1/3600000)*3600000,start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000),per=[];for(let hour=start;hour<=end;hour+=3600000)per.push({hour,...(buckets.get(hour)||{count:null,gap:false})});const BW=Math.max(280,$('bars').getBoundingClientRect().width||W),br=BW-16,bw=(br-left)/per.length;chartWidths.bars=BW;$('bars').setAttribute('viewBox','0 0 '+BW+' 150');const max=Math.max(1,...per.map(b=>b.count||0)),min=Math.min(0,...per.map(b=>b.count||0)),by=n=>108-(n-min)/(max-min)*88,zero=by(0);let bars='<line x1="'+left+'" x2="'+br+'" y1="'+zero+'" y2="'+zero+'" stroke="var(--line)"/><text x="42" y="24" text-anchor="end" fill="var(--dim)" font-size="10">'+max+'</text>';bars+=per.map((b,i)=>{const x=left+i*bw;barPoints.push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+'\n'+(b.count===null?'No observation in this hour':(b.count>=0?'+':'')+b.count+' observed change'+(b.gap?'\nSpans a gap; actual hourly activity unknown':''))});return b.count===null?'<rect x="'+(x+1)+'" y="'+(zero-2)+'" width="'+Math.max(1,bw-2)+'" height="3" rx="1" fill="var(--dim)" opacity="0.3"/>':'<rect x="'+(x+1)+'" y="'+Math.min(zero,by(b.count))+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,Math.abs(by(b.count)-zero))+'" rx="2" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'" opacity="0.85"/>';}).join('');for(const i of [...new Set([0,Math.floor((per.length-1)/2),per.length-1])]){const x=left+(i+.5)*bw,anchor=i===0?'start':i===per.length-1?'end':'middle';bars+='<text x="'+x+'" y="128" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortTime(per[i].hour)+'</text><text x="'+x+'" y="143" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(per[i].hour)+'</text>';}$('bars').innerHTML=bars;
 }
-function drawProjection(pts) {
-  $('proj').replaceChildren(); $('proj-basis').textContent='Not enough history for a trend.';
-  $('proj-note').textContent='Illustrative linear scenario, not a forecast or guarantee. Configured checks do not establish completed downloads or monitoring’s share of the counter. Registry corrections can decrease the count.';
-  if(pts.length<2) return;
-  const last=pts.at(-1), end=timestamp(last.at), cutoff=end-7*86400000;
-  const base=[...pts].reverse().find(p=>timestamp(p.at)<=cutoff)||pts[0], days=(end-timestamp(base.at))/86400000;
-  if(days<0.25) return;
-  const daily=(last.downloadCount-base.downloadCount)/days;
-  $('proj-basis').textContent=(historyFailed||liveFailed?'Cached-data scenario. ':'')+'Observed net change: '+Math.round(daily).toLocaleString()+'/day over '+days.toFixed(1)+' days, ending '+when(last.at)+'.';
-  const targets = [['Nov 1, 2026',Date.parse('2026-11-01T00:00:00-07:00')],['Jan 1, 2027',Date.parse('2027-01-01T00:00:00-08:00')]].filter(([,t]) => t > Date.now());
-  if (!targets.length) targets.push(['In 30 days',Date.now()+30*86400000],['In 90 days',Date.now()+90*86400000]);
-  for(const [label,target] of targets) {
-    const daysAhead=(target-end)/86400000;
-    const estimate=Math.round(last.downloadCount+daily*daysAhead), tr=document.createElement('tr'), lab=document.createElement('td'), val=document.createElement('td'); lab.className='lab'; val.className='val'; lab.textContent=label+' (Pacific)'; val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful'; tr.append(lab,val); $('proj').append(tr);
-  }
-}
-async function refreshLive() {
-  if (refreshing) return refreshing;
-  const btn=$('refresh'); btn.disabled=true; btn.classList.add('busy'); btn.textContent='Refreshing…';
-  const readRevision=revision;
-  refreshing=(async()=>{
-    // All reads start once, independently. One service failing never skips another.
-    const result=await Promise.allSettled([
-      request(RAW('status.json')).then(j=>{ if(!j||timestamp(j.updatedAt)===null||!j.github||typeof j.github!=='object') throw new Error('invalid status'); statusData=j; }),
-      fetchLive(),
-      request(RAW('downloads.jsonl'),{},'text').then(text=>{ const rows=text.split('\n').filter(l=>l.trim()); const valid=points(rows.map(l=>{try{return JSON.parse(l);}catch{return null;}})); if(rows.length&&!valid.length) throw new Error('invalid history'); invalidHistoryRows=rows.length-valid.length; branchPoints=valid; }),
-      request(API).then(j=>applySettings(j,readRevision))
-    ]);
-    statusFailed=result[0].status==='rejected'; liveFailed=result[1].status==='rejected'; historyFailed=result[2].status==='rejected';
-    if(result[3].status==='rejected') serverWritable=false;
-    renderStatus(); renderSettings(); refreshTokenUi(); renderCount();
-    const seen=new Set(), merged=[...branchPoints,...livePoints()].sort((a,b)=>timestamp(a.at)-timestamp(b.at)).filter(p=>{const key=p.at+':'+p.downloadCount; if(seen.has(key))return false; seen.add(key); return true;});
-    drawHistory(merged); drawProjection(merged);
-  })().catch(()=>{ $('stamp').textContent='Dashboard rendering failed. Refresh to retry.'; }).finally(()=>{ refreshing=null; btn.disabled=false; btn.classList.remove('busy'); btn.textContent='Refresh now'; });
-  return refreshing;
-}
-const tip=document.createElement('div'); tip.id='tip'; tip.className='tip'; tip.setAttribute('role','status'); tip.setAttribute('aria-live','polite'); document.body.append(tip);
-for(const target of ['github','imac']) $(prefix(target)+'-total').addEventListener('input',()=>{dirty[target]=true;});
-if (typeof ResizeObserver !== 'undefined') { let resizeTimer; new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer=setTimeout(()=>drawHistory(drawnPoints),100); }).observe($('chart')); }
-attachChart('chart',()=>chartPoints); attachChart('bars',()=>barPoints);
-refreshTokenUi(); refreshLive();
-setInterval(() => { if (!document.hidden) refreshLive(); },120000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshLive(); });
+function drawProjection(pts,target=chartTarget){$('proj').replaceChildren();$('proj-basis').textContent='Not enough history for a trend.';$('proj-note').textContent='Illustrative linear scenario, not a forecast or guarantee. Configured checks do not establish completed downloads or monitoring’s share of either counter. Registry corrections can decrease counts.';if(pts.length<2)return;const last=pts.at(-1),end=timestamp(last.at),cutoff=end-7*86400000,base=[...pts].reverse().find(p=>timestamp(p.at)<=cutoff)||pts[0],days=(end-timestamp(base.at))/86400000;if(days<0.25)return;const daily=(last.downloadCount-base.downloadCount)/days;$('proj-basis').textContent=(historyFailed[target]||liveFailed[target]?'Cached-data scenario. ':'')+EXTENSIONS[target].label+' observed net change: '+Math.round(daily).toLocaleString()+'/day over '+days.toFixed(1)+' days, ending '+when(last.at)+'.';const targets=[['Nov 1, 2026',Date.parse('2026-11-01T00:00:00-07:00')],['Jan 1, 2027',Date.parse('2027-01-01T00:00:00-08:00')]].filter(([,t])=>t>Date.now());if(!targets.length)targets.push(['In 30 days',Date.now()+30*86400000],['In 90 days',Date.now()+90*86400000]);for(const [label,targetDate] of targets){const daysAhead=(targetDate-end)/86400000,estimate=Math.round(last.downloadCount+daily*daysAhead),tr=document.createElement('tr'),lab=document.createElement('td'),val=document.createElement('td');lab.className='lab';val.className='val';lab.textContent=label+' (Pacific)';val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful';tr.append(lab,val);$('proj').append(tr);}}
+function selectChart(target){if(!EXTENSIONS[target])return;chartTarget=target;for(const key of Object.keys(EXTENSIONS)){const button=$('show-'+key);if(button){button.className='secondary'+(key===target?' active':'');button.setAttribute('aria-pressed',String(key===target));}}const merged=mergePoints(target);drawHistory(merged,target);drawProjection(merged,target);}
+async function fetchHistory(target){const text=await request(RAW(EXTENSIONS[target].history),{},'text'),rows=text.split('\n').filter(l=>l.trim()),valid=points(rows.map(l=>{try{return JSON.parse(l);}catch{return null;}}));if(rows.length&&!valid.length)throw new Error('invalid history');invalidHistoryRows[target]=rows.length-valid.length;branchPoints[target]=valid;}
+async function refreshLive(){if(refreshing)return refreshing;const btn=$('refresh');btn.disabled=true;btn.classList.add('busy');btn.textContent='Refreshing…';const readRevision=revision;refreshing=(async()=>{const result=await Promise.allSettled([request(RAW('status.json')).then(j=>{if(!j||timestamp(j.updatedAt)===null||!j.github||typeof j.github!=='object')throw new Error('invalid status');statusData=j;}),fetchLive('promptr'),fetchLive('cognispec'),fetchHistory('promptr'),fetchHistory('cognispec'),request(API).then(j=>applySettings(j,readRevision))]);statusFailed=result[0].status==='rejected';liveFailed.promptr=result[1].status==='rejected';liveFailed.cognispec=result[2].status==='rejected';historyFailed.promptr=result[3].status==='rejected';historyFailed.cognispec=result[4].status==='rejected';if(result[5].status==='rejected')serverWritable=false;renderStatus();renderSettings();refreshTokenUi();renderCounts();const merged=mergePoints(chartTarget);drawHistory(merged,chartTarget);drawProjection(merged,chartTarget);})().catch(()=>{$('stamp').textContent='Dashboard rendering failed. Refresh to retry.';}).finally(()=>{refreshing=null;btn.disabled=false;btn.classList.remove('busy');btn.textContent='Refresh now';});return refreshing;}
+const tip=document.createElement('div');tip.id='tip';tip.className='tip';tip.setAttribute('role','status');tip.setAttribute('aria-live','polite');document.body.append(tip);for(const target of SETTINGS_TARGETS)$(prefix(target)+'-total').addEventListener('input',()=>{dirty[target]=true;});if(typeof ResizeObserver!=='undefined'){let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>drawHistory(drawnPoints,chartTarget),100);}).observe($('chart'));}attachChart('chart',()=>chartPoints);attachChart('bars',()=>barPoints);refreshTokenUi();refreshLive();setInterval(()=>{if(!document.hidden)refreshLive();},120000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
 
 </script>
 </body>
