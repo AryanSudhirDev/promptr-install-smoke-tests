@@ -12,22 +12,22 @@
     color-scheme: light dark;
     --bg:#0f1115; --card:#171a21; --line:#262b36; --text:#e6e8ee; --dim:#98a0b3;
     --ok:#3fb950; --bad:#f85149; --warn:#d29922; --accent:#4c8dff;
-    --gap: 14px; --pad: 16px; --radius: 14px;
+    --gap: 10px; --pad: 12px; --radius: 12px;
   }
   @media (prefers-color-scheme: light) { :root { --bg:#f6f7f9; --card:#fff; --line:#e3e6ec; --text:#1a1d23; --dim:#5f6673; } }
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; background:var(--bg); color:var(--text); }
   body {
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+    font:14px/1.38 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif;
     -webkit-text-size-adjust:100%; min-height:100dvh;
-    padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
 
-  header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:var(--gap); }
-  h1 { font-size:clamp(17px, 2vw, 22px); margin:0 0 2px; letter-spacing:-.015em; }
-  .sub { color:var(--dim); font-size:13px; }
-  .headline { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
-  .headline .big { font-size:clamp(26px, 3.2vw, 38px); font-weight:650; letter-spacing:-.025em; font-variant-numeric:tabular-nums; }
+  header { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:var(--gap); }
+  h1 { font-size:clamp(17px, 2vw, 21px); margin:0 0 1px; letter-spacing:-.015em; }
+  .sub { color:var(--dim); font-size:12px; }
+  .headline { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .headline .big { font-size:clamp(24px, 2.8vw, 34px); font-weight:650; letter-spacing:-.025em; font-variant-numeric:tabular-nums; }
 
   /* Dashboard grid: fills the window on desktop, single column on phones. */
   .layout { display:grid; grid-template-columns:1fr; gap:var(--gap); }
@@ -35,49 +35,58 @@
   @media (min-width: 1180px) { .layout { grid-template-columns:repeat(12, minmax(0,1fr)); } }
 
   .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:var(--pad); min-width:0; }
-  .card h2 { font-size:14px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
-  .where { color:var(--dim); font-size:12px; margin-bottom:12px; }
+  .card h2 { font-size:13.5px; margin:0 0 1px; display:flex; align-items:center; gap:7px; }
+  .where { color:var(--dim); font-size:11px; margin-bottom:8px; }
   @media (min-width: 1180px) {
-    .c-gh, .c-im, .c-cog { grid-column: span 4; }
-    .c-sum { grid-column: span 12; }
-    .c-chart { grid-column: span 8; }
-    .c-proj { grid-column: span 4; }
-    .c-token { grid-column: span 12; }
+    .c-gh, .c-im, .c-cog, .c-sum { grid-column: span 3; }
+    .trend-grid, .c-token { grid-column: 1 / -1; }
   }
 
   .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block; flex:none; }
   .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); } .dot.warn { background:var(--warn); }
-  label { display:block; font-size:12px; color:var(--dim); margin-bottom:6px; }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  input { flex:1 1 120px; min-width:0; padding:10px 12px; font-size:16px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-family:inherit; }
-  button { padding:10px 15px; font-size:14px; border-radius:10px; border:1px solid var(--line); background:var(--accent); color:#fff; cursor:pointer; white-space:nowrap; min-height:42px; }
+  label { display:block; font-size:11px; color:var(--dim); margin-bottom:4px; }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  input { flex:1 1 120px; min-width:0; padding:7px 9px; font-size:15px; border-radius:9px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-family:inherit; }
+  button { padding:8px 12px; font-size:13px; border-radius:9px; border:1px solid var(--line); background:var(--accent); color:#fff; cursor:pointer; white-space:nowrap; min-height:36px; }
   button.secondary { background:transparent; color:var(--text); }
   button:disabled { opacity:.45; cursor:default; }
-  .stats { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); font-size:13px; color:var(--dim); }
+  .stats { margin-top:8px; padding-top:7px; border-top:1px solid var(--line); font-size:11px; color:var(--dim); }
   .stats b { color:var(--text); font-weight:600; }
-  .msg { font-size:12px; margin-top:8px; min-height:16px; }
+  .msg { font-size:11px; margin-top:4px; min-height:14px; }
   .msg.ok { color:var(--ok); } .msg.bad { color:var(--bad); }
 
   .toprow { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
   #refresh.busy { opacity:.6; }
   .livedot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ok); margin-right:5px; vertical-align:middle; }
 
-  .winrow { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin:10px 0 4px; }
-  .win { padding:10px 12px; border-radius:10px; background:var(--bg); font-size:12px; color:var(--dim); }
-  .win b { display:block; font-size:clamp(16px, 1.6vw, 20px); color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
+  .winrow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:6px 0 3px; }
+  .win { padding:6px 8px; border-radius:9px; background:var(--bg); font-size:10px; color:var(--dim); }
+  .win b { display:block; font-size:16px; color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
 
   svg { display:block; width:100%; }
-  #chart { height:260px; }
-  #bars  { height:150px; }
+  .trend-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--gap); }
+  .trend-card { min-width:0; padding:11px; }
+  .trend-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .trend-head .where { margin:0; }
+  .trend-current { text-align:right; min-width:100px; }
+  .trend-current .big { display:block; font-size:21px; line-height:1.05; font-weight:650; font-variant-numeric:tabular-nums; }
+  .trend-current .where { white-space:nowrap; }
+  #chart-promptr, #chart-cognispec { height:155px; }
+  #bars-promptr, #bars-cognispec { height:72px; }
+  .bars-title { margin-top:4px; margin-bottom:1px; }
+  .trend-note { margin:3px 0 0; min-height:15px; }
+  .trend-scenario { border-top:1px solid var(--line); margin-top:5px; padding-top:5px; }
+  .trend-scenario h3 { display:inline; font-size:11px; margin:0 7px 0 0; }
+  .trend-scenario .where { display:inline; margin:0; }
+  #proj-promptr, #proj-cognispec { width:100%; border-collapse:collapse; font-size:11px; margin-top:2px; }
+  #proj-promptr td, #proj-cognispec td { padding:2px 0; border-bottom:1px solid var(--line); }
+  #proj-promptr tr:last-child td, #proj-cognispec tr:last-child td { border-bottom:0; }
+  #proj-promptr .lab, #proj-cognispec .lab { color:var(--dim); }
+  #proj-promptr .val, #proj-cognispec .val { text-align:right; font-weight:650; font-variant-numeric:tabular-nums; }
+  .scenario-note { margin:3px 0 0; font-size:10px; line-height:1.25; }
 
-  #proj { width:100%; border-collapse:collapse; font-size:14px; }
-  #proj td { padding:9px 0; border-bottom:1px solid var(--line); }
-  #proj tr:last-child td { border-bottom:0; }
-  #proj .lab { color:var(--dim); }
-  #proj .val { text-align:right; font-weight:650; font-variant-numeric:tabular-nums; }
-  #proj .sub2 { text-align:right; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
-
-  details.card > summary { cursor:pointer; font-size:14px; list-style:none; }
+  .c-token { padding:8px 11px; }
+  details.card > summary { cursor:pointer; font-size:12px; list-style:none; }
   details.card > summary::-webkit-details-marker { display:none; }
   details.card > summary::before { content:'▸ '; color:var(--dim); }
   details.card[open] > summary::before { content:'▾ '; }
@@ -89,15 +98,15 @@
          box-shadow:0 8px 28px rgba(0,0,0,.35); max-width:min(330px, 85vw); white-space:pre-line; }
   .tip .tip-n { font-weight:650; font-variant-numeric:tabular-nums; }
   .tip .tip-s { color:var(--dim); font-size:12px; }
-  .ext-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:10px; }
-  .ext-metric { min-width:0; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--bg); }
-  .ext-metric h3 { margin:0 0 4px; font-size:14px; }
-  .ext-metric h3 span { color:var(--dim); font-size:12px; font-weight:400; }
-  .ext-metric .headline { gap:8px; }
-  .ext-metric .big { font-size:clamp(24px, 2.8vw, 34px); }
-  .chart-switch { margin:10px 0 2px; }
-  .chart-switch button.active { background:var(--accent); color:#fff; }
-  #chart, #bars { touch-action:pan-y; cursor:crosshair; }
+  .ext-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:6px; }
+  .ext-metric { min-width:0; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--bg); }
+  .ext-metric h3 { margin:0 0 2px; font-size:13px; }
+  .ext-metric h3 span { color:var(--dim); font-size:11px; font-weight:400; }
+  .ext-metric .headline { gap:7px; }
+  .ext-metric .big { font-size:clamp(22px, 2.5vw, 30px); }
+  #chart-promptr, #chart-cognispec, #bars-promptr, #bars-cognispec { touch-action:pan-y; cursor:crosshair; }
+  @media (max-width: 759px) { .trend-grid { grid-template-columns:1fr; } }
+  @media (max-width: 520px) { .ext-grid { grid-template-columns:1fr; } .trend-current { min-width:84px; } }
   svg:focus-visible { outline:2px solid var(--accent); outline-offset:4px; border-radius:8px; }
   a { color:var(--accent); }
 </style>
@@ -169,28 +178,46 @@
       <div class="stats">Combined <b id="combined">—</b> checks/day configured · GitHub Promptr passed today (UTC): <b id="today">—</b></div>
     </div>
 
-    <div class="card c-chart">
-      <h2>Download progression</h2>
-      <div class="where">Pacific time (PDT/PST) · Hover, touch, or use arrow keys to explore.</div>
-      <div class="row chart-switch" role="group" aria-label="Choose extension history">
-        <span class="where" style="margin:0">Showing:</span>
-        <button class="secondary active" id="show-promptr" onclick="selectChart('promptr')" aria-pressed="true">Promptr</button>
-        <button class="secondary" id="show-cognispec" onclick="selectChart('cognispec')" aria-pressed="false">Cognispec</button>
-      </div>
-      <div id="win" class="winrow"></div>
-      <svg id="chart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
-      <div class="where" id="chart-note" style="margin:6px 0 0"></div>
-      <div style="margin-top:12px">
-        <div class="where" style="margin-bottom:4px">Hourly observed changes · Pacific time</div>
-        <svg id="bars" viewBox="0 0 800 110" preserveAspectRatio="none"></svg>
-      </div>
-    </div>
+    <div class="trend-grid">
+      <section class="card trend-card" aria-labelledby="trend-promptr-heading">
+        <div class="trend-head">
+          <div>
+            <h2 id="trend-promptr-heading">Promptr trend</h2>
+            <div class="where">Pacific time · counter progression and observed changes</div>
+          </div>
+          <div class="trend-current"><span class="big" id="trend-promptr-count">—</span><span class="where" id="trend-promptr-stamp">waiting</span></div>
+        </div>
+        <div id="win-promptr" class="winrow"></div>
+        <svg id="chart-promptr" viewBox="0 0 800 190" preserveAspectRatio="none"></svg>
+        <div class="where trend-note" id="chart-note-promptr"></div>
+        <div class="where bars-title">Hourly observed changes · Pacific time</div>
+        <svg id="bars-promptr" viewBox="0 0 800 86" preserveAspectRatio="none"></svg>
+        <div class="trend-scenario">
+          <h3>Trend scenario</h3><span class="where" id="proj-basis-promptr">Not enough history for a trend.</span>
+          <table id="proj-promptr"></table>
+          <div class="where scenario-note" id="proj-note-promptr">Illustrative linear scenario, not a forecast or guarantee.</div>
+        </div>
+      </section>
 
-    <div class="card c-proj">
-      <h2>Trend scenario</h2>
-      <div class="where" id="proj-basis">…</div>
-      <table id="proj"></table>
-      <div class="where" id="proj-note" style="margin:10px 0 0"></div>
+      <section class="card trend-card" aria-labelledby="trend-cognispec-heading">
+        <div class="trend-head">
+          <div>
+            <h2 id="trend-cognispec-heading">Cognispec trend</h2>
+            <div class="where">Pacific time · counter progression and observed changes</div>
+          </div>
+          <div class="trend-current"><span class="big" id="trend-cognispec-count">—</span><span class="where" id="trend-cognispec-stamp">waiting</span></div>
+        </div>
+        <div id="win-cognispec" class="winrow"></div>
+        <svg id="chart-cognispec" viewBox="0 0 800 190" preserveAspectRatio="none"></svg>
+        <div class="where trend-note" id="chart-note-cognispec"></div>
+        <div class="where bars-title">Hourly observed changes · Pacific time</div>
+        <svg id="bars-cognispec" viewBox="0 0 800 86" preserveAspectRatio="none"></svg>
+        <div class="trend-scenario">
+          <h3>Trend scenario</h3><span class="where" id="proj-basis-cognispec">Not enough history for a trend.</span>
+          <table id="proj-cognispec"></table>
+          <div class="where scenario-note" id="proj-note-cognispec">Illustrative linear scenario, not a forecast or guarantee.</div>
+        </div>
+      </section>
     </div>
 
     <details class="card c-token" id="tokbox">
@@ -202,15 +229,10 @@
       </div>
       <div class="msg" role="status" aria-live="polite" id="tok-msg"></div>
       <div class="hint" id="tok-hint">
-        Viewing needs nothing. Writes use only the canonical Vercel API. Enter a dashboard key, never a GitHub token. The key is stored in this browser when storage is available; otherwise it lasts only for this page session.
+        Viewing needs nothing. Writes use only the canonical Vercel API. Enter a dashboard key, never a GitHub token. The key is stored in this browser when storage is available; otherwise it lasts only for this page session.<br>
+        Accepted settings are used by subsequent scheduled runs; scheduling and execution can be delayed. GitHub Promptr's number is a repo variable; the iMac reads both target settings from <code>monitor-config.json</code> each run. <a href="https://github.com/AryanSudhirDev/promptr-install-smoke-tests" target="_blank" rel="noopener">repo</a>
       </div>
     </details>
-  </div>
-
-  <div class="foot">
-    Accepted settings are used by subsequent scheduled runs; scheduling and execution can be delayed.
-    GitHub Promptr's number is a repo variable; the iMac reads both target settings from <code>monitor-config.json</code> each run.
-    <a href="https://github.com/AryanSudhirDev/promptr-install-smoke-tests" target="_blank" rel="noopener">repo</a>
   </div>
 
 <script>
@@ -365,39 +387,54 @@ function renderCount(target) {
   const version = useLive ? live.version : published?.version;
   $(id + 'ver').textContent = typeof version === 'string' ? 'v' + version.slice(0,100) : 'unknown version';
   const failed = liveFailed[target];
-  $(id + 'stamp').textContent = (failed ? 'Live refresh failed. ' : '') + (!src ? 'No valid reading available.' : (failed ? 'Cached reading' : useLive ? 'Registry observed' : 'Published reading') + ': ' + when(src.at));
+  const stamp = (failed ? 'Live refresh failed. ' : '') + (!src ? 'No valid reading available.' : (failed ? 'Cached reading' : useLive ? 'Registry observed' : 'Published reading') + ': ' + when(src.at));
+  $(id + 'stamp').textContent = stamp;
   $(id + 'extra').textContent = useLive && count(live.reviewCount) !== null ? fmt(live.reviewCount) + ' reviews' : '';
+  const trend = TREND_VIEWS[target];
+  if (trend) { $(trend.current).textContent = src ? fmt(src.downloadCount) : 'unknown'; $(trend.stamp).textContent = src ? (failed ? 'cached reading' : 'latest reading') : 'no reading'; }
 }
 function renderCounts() { for (const target of Object.keys(EXTENSIONS)) renderCount(target); }
-let chartTarget = 'promptr', chartPoints = [], barPoints = [], drawnPoints = [];
-const chartWidths = {chart:800, bars:800};
+const TREND_VIEWS = {
+  promptr: {chart:'chart-promptr', bars:'bars-promptr', win:'win-promptr', chartNote:'chart-note-promptr', proj:'proj-promptr', projBasis:'proj-basis-promptr', projNote:'proj-note-promptr', current:'trend-promptr-count', stamp:'trend-promptr-stamp', guide:'guide-promptr', marker:'marker-promptr'},
+  cognispec: {chart:'chart-cognispec', bars:'bars-cognispec', win:'win-cognispec', chartNote:'chart-note-cognispec', proj:'proj-cognispec', projBasis:'proj-basis-cognispec', projNote:'proj-note-cognispec', current:'trend-cognispec-count', stamp:'trend-cognispec-stamp', guide:'guide-cognispec', marker:'marker-cognispec'},
+};
+const chartPoints = {promptr: [], cognispec: []}, barPoints = {promptr: [], cognispec: []}, drawnPoints = {promptr: [], cognispec: []};
+const chartWidths = {promptr:{chart:800,bars:800}, cognispec:{chart:800,bars:800}};
+function trendView(target) { return TREND_VIEWS[target] || TREND_VIEWS.promptr; }
 function mergePoints(target) {
   const seen = new Set(), list = [...branchPoints[target], ...livePoints(target)]; const published = publishedFor(target); if (published) list.push(published);
   return list.map(point).filter(Boolean).sort((a,b)=>timestamp(a.at)-timestamp(b.at)).filter(p=>{const key=p.at+':'+p.downloadCount;if(seen.has(key))return false;seen.add(key);return true;});
 }
-function hideTip() { $('tip').style.display = 'none'; $('guide')?.setAttribute('opacity','0'); $('marker')?.setAttribute('opacity','0'); }
+function hideTip() {
+  $('tip').style.display = 'none';
+  for (const ids of Object.values(TREND_VIEWS)) { $(ids.guide)?.setAttribute('opacity','0'); $(ids.marker)?.setAttribute('opacity','0'); }
+}
 function showTip(text, x, y) { const tip=$('tip'); tip.textContent=text; tip.style.display='block'; const r=tip.getBoundingClientRect(); tip.style.left=Math.max(8,Math.min(x+10,innerWidth-r.width-8))+'px'; tip.style.top=Math.max(8,Math.min(y-r.height-10,innerHeight-r.height-8))+'px'; }
-function attachChart(id, getPoints) {
-  const svg=$(id);let index=0;svg.setAttribute('tabindex','0');svg.setAttribute('role','img');svg.setAttribute('aria-label',id==='chart'?'Counter observations. Use left and right arrows to inspect readings.':'Observed changes by Pacific capture hour. Missing hours are unknown. Use left and right arrows.');svg.setAttribute('aria-describedby','tip');
-  function show(i,x,y){const ps=getPoints();if(!ps.length){hideTip();return;}index=Math.max(0,Math.min(i,ps.length-1));const p=ps[index],r=svg.getBoundingClientRect();if(id==='chart'){$('guide')?.setAttribute('x1',p.x);$('guide')?.setAttribute('x2',p.x);$('guide')?.setAttribute('opacity','1');$('marker')?.setAttribute('cx',p.x);$('marker')?.setAttribute('cy',p.y);$('marker')?.setAttribute('opacity','1');}else{$('guide')?.setAttribute('opacity','0');$('marker')?.setAttribute('opacity','0');}showTip(p.label,x??r.left+p.x/chartWidths[id]*r.width,y??r.top+r.height/2);}
-  svg.addEventListener('pointermove',e=>{const ps=getPoints(),r=svg.getBoundingClientRect();if(!ps.length||!r.width)return;const x=(e.clientX-r.left)/r.width*chartWidths[id];let best=0;ps.forEach((p,i)=>{if(Math.abs(p.x-x)<Math.abs(ps[best].x-x))best=i;});show(best,e.clientX,e.clientY);});svg.addEventListener('pointerleave',hideTip);svg.addEventListener('blur',hideTip);svg.addEventListener('focus',()=>show(index));svg.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key))return;e.preventDefault();if(e.key==='Escape')hideTip();else show(e.key==='Home'?0:e.key==='End'?getPoints().length-1:index+(e.key==='ArrowLeft'?-1:1));});
+function attachChart(target, kind, getPoints) {
+  const ids=trendView(target), id=ids[kind], svg=$(id), label=EXTENSIONS[target].label; let index=0;
+  svg.setAttribute('tabindex','0'); svg.setAttribute('role','img'); svg.setAttribute('aria-label',kind==='chart'?label+' counter observations. Use left and right arrows to inspect readings.':label+' observed changes by Pacific capture hour. Missing hours are unknown. Use left and right arrows.'); svg.setAttribute('aria-describedby','tip');
+  function show(i,x,y){const ps=getPoints();if(!ps.length){hideTip();return;}index=Math.max(0,Math.min(i,ps.length-1));const p=ps[index],r=svg.getBoundingClientRect();if(kind==='chart'){$(ids.guide)?.setAttribute('x1',p.x);$(ids.guide)?.setAttribute('x2',p.x);$(ids.guide)?.setAttribute('opacity','1');$(ids.marker)?.setAttribute('cx',p.x);$(ids.marker)?.setAttribute('cy',p.y);$(ids.marker)?.setAttribute('opacity','1');}else{$(ids.guide)?.setAttribute('opacity','0');$(ids.marker)?.setAttribute('opacity','0');}showTip(p.label,x??r.left+p.x/chartWidths[target][kind]*r.width,y??r.top+r.height/2);}
+  svg.addEventListener('pointermove',e=>{const ps=getPoints(),r=svg.getBoundingClientRect();if(!ps.length||!r.width)return;const x=(e.clientX-r.left)/r.width*chartWidths[target][kind];let best=0;ps.forEach((p,i)=>{if(Math.abs(p.x-x)<Math.abs(ps[best].x-x))best=i;});show(best,e.clientX,e.clientY);});
+  svg.addEventListener('pointerleave',hideTip); svg.addEventListener('blur',hideTip); svg.addEventListener('focus',()=>show(index));
+  svg.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key))return;e.preventDefault();if(e.key==='Escape')hideTip();else show(e.key==='Home'?0:e.key==='End'?getPoints().length-1:index+(e.key==='ArrowLeft'?-1:1));});
 }
-function drawHistory(pts,target=chartTarget) {
-  drawnPoints=pts;chartPoints=[];barPoints=[];hideTip();$('win').replaceChildren();$('bars').replaceChildren();const label=EXTENSIONS[target]?.label||target;
-  const note=(historyFailed[target]?'History refresh failed; cached readings. ':'')+label+': '+pts.length+' readings · Dashed lines bridge unobserved gaps. Grey bars: no reading. Amber bars: change spans a gap. Changes use the later capture hour.'+(invalidHistoryRows[target]?' '+invalidHistoryRows[target]+' invalid rows skipped.':'');$('chart-note').textContent=note;
-  const W=Math.max(280,$('chart').getBoundingClientRect().width||800),H=260,left=52,right=W-16,top=18,bottom=210;chartWidths.chart=W;$('chart').setAttribute('viewBox','0 0 '+W+' '+H);if(!pts.length){$('chart').innerHTML='<text x="16" y="50" fill="var(--dim)" font-size="13">Waiting for observations</text>';return;}
-  const xs=pts.map(p=>timestamp(p.at)),ys=pts.map(p=>p.downloadCount),x0=xs[0],x1=xs.at(-1);let lo=ys[0],hi=ys[0];for(const n of ys){lo=Math.min(lo,n);hi=Math.max(hi,n);}const rough=Math.max(1,(hi-lo)/4),power=10**Math.floor(Math.log10(rough)),fraction=rough/power,step=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power;let y0=Math.max(0,Math.floor(lo/step)*step),y1=Math.ceil(hi/step)*step;if(y0===y1){y0=Math.max(0,y0-step);y1+=step;}const px=t=>x0===x1?(left+right)/2:left+(t-x0)/(x1-x0)*(right-left),py=n=>bottom-(n-y0)/(y1-y0)*(bottom-top);const shortTime=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'}),shortDate=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric'});let html='';
-  for(let n=y0;n<=y1+step/2;n+=step){const y=py(n);html+='<line x1="'+left+'" x2="'+right+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(left-10)+'" y="'+(y+4)+'" text-anchor="end" fill="var(--dim)" font-size="11">'+fmt(n)+'</text>';}
-  let solid='',gaps='';pts.forEach((p,i)=>{const x=px(xs[i]),y=py(ys[i]),gap=i>0&&xs[i]-xs[i-1]>90*60000;solid+=(i&&!gap?' L':' M')+x+','+y;if(gap)gaps+='M'+px(xs[i-1])+','+py(ys[i-1])+' L'+x+','+y+' ';const delta=i?ys[i]-ys[i-1]:null;chartPoints.push({x,y,label:fmt(ys[i])+' downloads\n'+when(p.at)+(delta===null?'':'\n'+(delta>=0?'+':'')+delta+' since previous reading')+(gap?'\nUnobserved gap before this reading':'')+(p.approx?'\nApproximate reading':'')});});
-  html+='<path d="'+gaps+'" fill="none" stroke="var(--accent)" opacity="0.45" stroke-width="1.5" stroke-dasharray="4 5"/><path d="'+solid+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';html+=pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="2.5" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join('');const nt=x0===x1?1:W<460?2:4;for(let i=0;i<nt;i++){const t=nt===1?x0:x0+(x1-x0)*i/(nt-1),x=px(t),anchor=i===0?'start':i===nt-1?'end':'middle';html+='<text x="'+x+'" y="232" text-anchor="'+anchor+'" fill="var(--dim)" font-size="11">'+shortTime(t)+'</text><text x="'+x+'" y="248" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(t)+'</text>';}html+='<line id="guide" y1="'+top+'" y2="'+bottom+'" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="marker" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>';$('chart').innerHTML=html;
-  for(const [name,hours] of [['Last hour',1],['Last 6 hours',6],['Last 24 hours',24]]){let base=-1;for(let i=0;i<xs.length;i++)if(xs[i]<=x1-hours*3600000)base=i;const el=document.createElement('div'),strong=document.createElement('b');el.className='win';const d=base<0?null:ys.at(-1)-ys[base];strong.textContent=d===null?'Not enough data':(d>0?'+':'')+fmt(d);el.append(strong,document.createTextNode(name+' (approx.)'));el.title='Change from the nearest earlier sample, relative to the latest reading';$('win').append(el);}
-  const buckets=new Map();for(let i=1;i<pts.length;i++){const hour=Math.floor(xs[i]/3600000)*3600000,b=buckets.get(hour)||{count:0,gap:false};b.count+=ys[i]-ys[i-1];b.gap||=xs[i]-xs[i-1]>90*60000;buckets.set(hour,b);}const end=Math.floor(x1/3600000)*3600000,start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000),per=[];for(let hour=start;hour<=end;hour+=3600000)per.push({hour,...(buckets.get(hour)||{count:null,gap:false})});const BW=Math.max(280,$('bars').getBoundingClientRect().width||W),br=BW-16,bw=(br-left)/per.length;chartWidths.bars=BW;$('bars').setAttribute('viewBox','0 0 '+BW+' 150');const max=Math.max(1,...per.map(b=>b.count||0)),min=Math.min(0,...per.map(b=>b.count||0)),by=n=>108-(n-min)/(max-min)*88,zero=by(0);let bars='<line x1="'+left+'" x2="'+br+'" y1="'+zero+'" y2="'+zero+'" stroke="var(--line)"/><text x="42" y="24" text-anchor="end" fill="var(--dim)" font-size="10">'+max+'</text>';bars+=per.map((b,i)=>{const x=left+i*bw;barPoints.push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+'\n'+(b.count===null?'No observation in this hour':(b.count>=0?'+':'')+b.count+' observed change'+(b.gap?'\nSpans a gap; actual hourly activity unknown':''))});return b.count===null?'<rect x="'+(x+1)+'" y="'+(zero-2)+'" width="'+Math.max(1,bw-2)+'" height="3" rx="1" fill="var(--dim)" opacity="0.3"/>':'<rect x="'+(x+1)+'" y="'+Math.min(zero,by(b.count))+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,Math.abs(by(b.count)-zero))+'" rx="2" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'" opacity="0.85"/>';}).join('');for(const i of [...new Set([0,Math.floor((per.length-1)/2),per.length-1])]){const x=left+(i+.5)*bw,anchor=i===0?'start':i===per.length-1?'end':'middle';bars+='<text x="'+x+'" y="128" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortTime(per[i].hour)+'</text><text x="'+x+'" y="143" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortDate(per[i].hour)+'</text>';}$('bars').innerHTML=bars;
+function drawHistory(pts,target='promptr') {
+  const ids=trendView(target), chart=$(ids.chart), bars=$(ids.bars); drawnPoints[target]=pts; chartPoints[target]=[]; barPoints[target]=[]; hideTip(); $(ids.win).replaceChildren(); bars.replaceChildren();
+  const label=EXTENSIONS[target]?.label||target;
+  const note=(historyFailed[target]?'History refresh failed; cached readings. ':'')+label+': '+pts.length+' readings · Dashed lines bridge unobserved gaps. Grey bars: no reading. Amber bars: change spans a gap. Changes use the later capture hour.'+(invalidHistoryRows[target]?' '+invalidHistoryRows[target]+' invalid rows skipped.':''); $(ids.chartNote).textContent=note;
+  const W=Math.max(280,chart.getBoundingClientRect().width||800),H=190,left=42,right=W-12,top=14,bottom=148; chartWidths[target].chart=W; chart.setAttribute('viewBox','0 0 '+W+' '+H);
+  if(!pts.length){chart.innerHTML='<text x="12" y="45" fill="var(--dim)" font-size="12">Waiting for observations</text>'; return;}
+  const xs=pts.map(p=>timestamp(p.at)),ys=pts.map(p=>p.downloadCount),x0=xs[0],x1=xs.at(-1); let lo=ys[0],hi=ys[0]; for(const n of ys){lo=Math.min(lo,n);hi=Math.max(hi,n);} const rough=Math.max(1,(hi-lo)/4),power=10**Math.floor(Math.log10(rough)),fraction=rough/power,step=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power; let y0=Math.max(0,Math.floor(lo/step)*step),y1=Math.ceil(hi/step)*step;if(y0===y1){y0=Math.max(0,y0-step);y1+=step;} const px=t=>x0===x1?(left+right)/2:left+(t-x0)/(x1-x0)*(right-left),py=n=>bottom-(n-y0)/(y1-y0)*(bottom-top); const shortTime=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'}),shortDate=t=>new Date(t).toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric'}); let html='';
+  for(let n=y0;n<=y1+step/2;n+=step){const y=py(n);html+='<line x1="'+left+'" x2="'+right+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(left-8)+'" y="'+(y+4)+'" text-anchor="end" fill="var(--dim)" font-size="10">'+fmt(n)+'</text>';}
+  let solid='',gaps='';pts.forEach((p,i)=>{const x=px(xs[i]),y=py(ys[i]),gap=i>0&&xs[i]-xs[i-1]>90*60000;solid+=(i&&!gap?' L':' M')+x+','+y;if(gap)gaps+='M'+px(xs[i-1])+','+py(ys[i-1])+' L'+x+','+y+' ';const delta=i?ys[i]-ys[i-1]:null;chartPoints[target].push({x,y,label:fmt(ys[i])+' downloads\\n'+when(p.at)+(delta===null?'':'\\n'+(delta>=0?'+':'')+delta+' since previous reading')+(gap?'\\nUnobserved gap before this reading':'')+(p.approx?'\\nApproximate reading':'')});});
+  html+='<path d="'+gaps+'" fill="none" stroke="var(--accent)" opacity="0.45" stroke-width="1.5" stroke-dasharray="4 5"/><path d="'+solid+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'; html+=pts.map((p,i)=>'<circle cx="'+px(xs[i])+'" cy="'+py(ys[i])+'" r="2.5" fill="'+(p.approx?'var(--dim)':'var(--accent)')+'"/>').join(''); const nt=x0===x1?1:W<460?2:4; for(let i=0;i<nt;i++){const t=nt===1?x0:x0+(x1-x0)*i/(nt-1),x=px(t),anchor=i===0?'start':i===nt-1?'end':'middle';html+='<text x="'+x+'" y="166" text-anchor="'+anchor+'" fill="var(--dim)" font-size="10">'+shortTime(t)+'</text><text x="'+x+'" y="180" text-anchor="'+anchor+'" fill="var(--dim)" font-size="9">'+shortDate(t)+'</text>';} html+='<line id="'+ids.guide+'" y1="'+top+'" y2="'+bottom+'" stroke="var(--dim)" stroke-dasharray="3 3" opacity="0"/><circle id="'+ids.marker+'" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2" opacity="0"/>'; chart.innerHTML=html;
+  for(const [name,hours] of [['Last hour',1],['Last 6 hours',6],['Last 24 hours',24]]){let base=-1;for(let i=0;i<xs.length;i++)if(xs[i]<=x1-hours*3600000)base=i;const el=document.createElement('div'),strong=document.createElement('b');el.className='win';const d=base<0?null:ys.at(-1)-ys[base];strong.textContent=d===null?'Not enough data':(d>0?'+':'')+fmt(d);el.append(strong,document.createTextNode(name+' (approx.)'));el.title='Change from the nearest earlier sample, relative to the latest reading';$(ids.win).append(el);}
+  const buckets=new Map();for(let i=1;i<pts.length;i++){const hour=Math.floor(xs[i]/3600000)*3600000,b=buckets.get(hour)||{count:0,gap:false};b.count+=ys[i]-ys[i-1];b.gap||=xs[i]-xs[i-1]>90*60000;buckets.set(hour,b);} const end=Math.floor(x1/3600000)*3600000,start=Math.max(Math.floor(x0/3600000)*3600000,end-47*3600000),per=[];for(let hour=start;hour<=end;hour+=3600000)per.push({hour,...(buckets.get(hour)||{count:null,gap:false})}); const BW=Math.max(280,bars.getBoundingClientRect().width||W),br=BW-12,bw=(br-left)/per.length; chartWidths[target].bars=BW; bars.setAttribute('viewBox','0 0 '+BW+' 86'); const max=Math.max(1,...per.map(b=>b.count||0)),min=Math.min(0,...per.map(b=>b.count||0)),by=n=>56-(n-min)/(max-min)*42,zero=by(0); let barsHtml='<line x1="'+left+'" x2="'+br+'" y1="'+zero+'" y2="'+zero+'" stroke="var(--line)"/><text x="34" y="13" text-anchor="end" fill="var(--dim)" font-size="9">'+max+'</text>'; barsHtml+=per.map((b,i)=>{const x=left+i*bw;barPoints[target].push({x:x+bw/2,label:when(new Date(b.hour).toISOString())+'\\n'+(b.count===null?'No observation in this hour':(b.count>=0?'+':'')+b.count+' observed change'+(b.gap?'\\nSpans a gap; actual hourly activity unknown':''))});return b.count===null?'<rect x="'+(x+1)+'" y="'+(zero-2)+'" width="'+Math.max(1,bw-2)+'" height="3" rx="1" fill="var(--dim)" opacity="0.3"/>':'<rect x="'+(x+1)+'" y="'+Math.min(zero,by(b.count))+'" width="'+Math.max(1,bw-2)+'" height="'+Math.max(1,Math.abs(by(b.count)-zero))+'" rx="2" fill="'+(b.gap?'var(--warn)':b.count<0?'var(--bad)':'var(--accent)')+'" opacity="0.85"/>';}).join(''); for(const i of [...new Set([0,Math.floor((per.length-1)/2),per.length-1])]){const x=left+(i+.5)*bw,anchor=i===0?'start':i===per.length-1?'end':'middle';barsHtml+='<text x="'+x+'" y="73" text-anchor="'+anchor+'" fill="var(--dim)" font-size="9">'+shortTime(per[i].hour)+'</text><text x="'+x+'" y="83" text-anchor="'+anchor+'" fill="var(--dim)" font-size="9">'+shortDate(per[i].hour)+'</text>';} bars.innerHTML=barsHtml;
 }
-function drawProjection(pts,target=chartTarget){$('proj').replaceChildren();$('proj-basis').textContent='Not enough history for a trend.';$('proj-note').textContent='Illustrative linear scenario, not a forecast or guarantee. Configured checks do not establish completed downloads or monitoring’s share of either counter. Registry corrections can decrease counts.';if(pts.length<2)return;const last=pts.at(-1),end=timestamp(last.at),cutoff=end-7*86400000,base=[...pts].reverse().find(p=>timestamp(p.at)<=cutoff)||pts[0],days=(end-timestamp(base.at))/86400000;if(days<0.25)return;const daily=(last.downloadCount-base.downloadCount)/days;$('proj-basis').textContent=(historyFailed[target]||liveFailed[target]?'Cached-data scenario. ':'')+EXTENSIONS[target].label+' observed net change: '+Math.round(daily).toLocaleString()+'/day over '+days.toFixed(1)+' days, ending '+when(last.at)+'.';const targets=[['Nov 1, 2026',Date.parse('2026-11-01T00:00:00-07:00')],['Jan 1, 2027',Date.parse('2027-01-01T00:00:00-08:00')]].filter(([,t])=>t>Date.now());if(!targets.length)targets.push(['In 30 days',Date.now()+30*86400000],['In 90 days',Date.now()+90*86400000]);for(const [label,targetDate] of targets){const daysAhead=(targetDate-end)/86400000,estimate=Math.round(last.downloadCount+daily*daysAhead),tr=document.createElement('tr'),lab=document.createElement('td'),val=document.createElement('td');lab.className='lab';val.className='val';lab.textContent=label+' (Pacific)';val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful';tr.append(lab,val);$('proj').append(tr);}}
-function selectChart(target){if(!EXTENSIONS[target])return;chartTarget=target;for(const key of Object.keys(EXTENSIONS)){const button=$('show-'+key);if(button){button.className='secondary'+(key===target?' active':'');button.setAttribute('aria-pressed',String(key===target));}}const merged=mergePoints(target);drawHistory(merged,target);drawProjection(merged,target);}
+function drawProjection(pts,target='promptr') { const ids=trendView(target); $(ids.proj).replaceChildren(); $(ids.projBasis).textContent='Not enough history for a trend.'; $(ids.projNote).textContent='Illustrative linear scenario, not a forecast or guarantee.'; if(pts.length<2)return; const last=pts.at(-1),end=timestamp(last.at),cutoff=end-7*86400000,base=[...pts].reverse().find(p=>timestamp(p.at)<=cutoff)||pts[0],days=(end-timestamp(base.at))/86400000;if(days<0.25)return; const daily=(last.downloadCount-base.downloadCount)/days; $(ids.projBasis).textContent=(historyFailed[target]||liveFailed[target]?'Cached-data scenario. ':'')+EXTENSIONS[target].label+' observed net change: '+Math.round(daily).toLocaleString()+'/day over '+days.toFixed(1)+' days, ending '+when(last.at)+'.'; const targets=[['Nov 1, 2026',Date.parse('2026-11-01T00:00:00-07:00')],['Jan 1, 2027',Date.parse('2027-01-01T00:00:00-08:00')]].filter(([,t])=>t>Date.now());if(!targets.length)targets.push(['In 30 days',Date.now()+30*86400000],['In 90 days',Date.now()+90*86400000]);for(const [label,targetDate] of targets){const daysAhead=(targetDate-end)/86400000,estimate=Math.round(last.downloadCount+daily*daysAhead),tr=document.createElement('tr'),lab=document.createElement('td'),val=document.createElement('td');lab.className='lab';val.className='val';lab.textContent=label+' (Pacific)';val.textContent=Number.isSafeInteger(estimate)&&estimate>=0?'~'+fmt(estimate):'not meaningful';tr.append(lab,val);$(ids.proj).append(tr);}}
 async function fetchHistory(target){const text=await request(RAW(EXTENSIONS[target].history),{},'text'),rows=text.split('\n').filter(l=>l.trim()),valid=points(rows.map(l=>{try{return JSON.parse(l);}catch{return null;}}));if(rows.length&&!valid.length)throw new Error('invalid history');invalidHistoryRows[target]=rows.length-valid.length;branchPoints[target]=valid;}
-async function refreshLive(){if(refreshing)return refreshing;const btn=$('refresh');btn.disabled=true;btn.classList.add('busy');btn.textContent='Refreshing…';const readRevision=revision;refreshing=(async()=>{const result=await Promise.allSettled([request(RAW('status.json')).then(j=>{if(!j||timestamp(j.updatedAt)===null||!j.github||typeof j.github!=='object')throw new Error('invalid status');statusData=j;}),fetchLive('promptr'),fetchLive('cognispec'),fetchHistory('promptr'),fetchHistory('cognispec'),request(API).then(j=>applySettings(j,readRevision))]);statusFailed=result[0].status==='rejected';liveFailed.promptr=result[1].status==='rejected';liveFailed.cognispec=result[2].status==='rejected';historyFailed.promptr=result[3].status==='rejected';historyFailed.cognispec=result[4].status==='rejected';if(result[5].status==='rejected')serverWritable=false;renderStatus();renderSettings();refreshTokenUi();renderCounts();const merged=mergePoints(chartTarget);drawHistory(merged,chartTarget);drawProjection(merged,chartTarget);})().catch(()=>{$('stamp').textContent='Dashboard rendering failed. Refresh to retry.';}).finally(()=>{refreshing=null;btn.disabled=false;btn.classList.remove('busy');btn.textContent='Refresh now';});return refreshing;}
-const tip=document.createElement('div');tip.id='tip';tip.className='tip';tip.setAttribute('role','status');tip.setAttribute('aria-live','polite');document.body.append(tip);for(const target of SETTINGS_TARGETS)$(prefix(target)+'-total').addEventListener('input',()=>{dirty[target]=true;});if(typeof ResizeObserver!=='undefined'){let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>drawHistory(drawnPoints,chartTarget),100);}).observe($('chart'));}attachChart('chart',()=>chartPoints);attachChart('bars',()=>barPoints);refreshTokenUi();refreshLive();setInterval(()=>{if(!document.hidden)refreshLive();},120000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
+async function refreshLive(){if(refreshing)return refreshing;const btn=$('refresh');btn.disabled=true;btn.classList.add('busy');btn.textContent='Refreshing…';const readRevision=revision;refreshing=(async()=>{const result=await Promise.allSettled([request(RAW('status.json')).then(j=>{if(!j||timestamp(j.updatedAt)===null||!j.github||typeof j.github!=='object')throw new Error('invalid status');statusData=j;}),fetchLive('promptr'),fetchLive('cognispec'),fetchHistory('promptr'),fetchHistory('cognispec'),request(API).then(j=>applySettings(j,readRevision))]);statusFailed=result[0].status==='rejected';liveFailed.promptr=result[1].status==='rejected';liveFailed.cognispec=result[2].status==='rejected';historyFailed.promptr=result[3].status==='rejected';historyFailed.cognispec=result[4].status==='rejected';if(result[5].status==='rejected')serverWritable=false;renderStatus();renderSettings();refreshTokenUi();renderCounts();for(const target of Object.keys(EXTENSIONS)){const merged=mergePoints(target);drawHistory(merged,target);drawProjection(merged,target);}})().catch(()=>{$('stamp').textContent='Dashboard rendering failed. Refresh to retry.';}) .finally(()=>{refreshing=null;btn.disabled=false;btn.classList.remove('busy');btn.textContent='Refresh now';});return refreshing;}
+const tip=document.createElement('div');tip.id='tip';tip.className='tip';tip.setAttribute('role','status');tip.setAttribute('aria-live','polite');document.body.append(tip);for(const target of SETTINGS_TARGETS)$(prefix(target)+'-total').addEventListener('input',()=>{dirty[target]=true;});if(typeof ResizeObserver!=='undefined'){let resizeTimer;const redraw=()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{for(const target of Object.keys(EXTENSIONS)){if(drawnPoints[target].length){drawHistory(drawnPoints[target],target);drawProjection(drawnPoints[target],target);}}},100);};for(const target of Object.keys(EXTENSIONS))new ResizeObserver(redraw).observe($(TREND_VIEWS[target].chart));}for(const target of Object.keys(EXTENSIONS)){attachChart(target,'chart',()=>chartPoints[target]);attachChart(target,'bars',()=>barPoints[target]);}refreshTokenUi();refreshLive();setInterval(()=>{if(!document.hidden)refreshLive();},120000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLive();});
 
 </script>
 </body>

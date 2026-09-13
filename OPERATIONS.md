@@ -282,7 +282,7 @@ Combined live validation, 11:07 PDT batch: 5 Promptr + 5 CogniSpec checks all pa
 
 ## Unified Promptr and Cognispec dashboard (2026-09-13)
 
-The hosted dashboard now covers both published extensions from one page. It shows separate live Open VSX counters, versions and review counts, separate historical data streams, and a keyboard-accessible progression-chart switcher. Promptr keeps the existing `downloads.jsonl` data path; Cognispec uses `downloads-cognispec.jsonl`. The legacy `status.openvsx` Promptr object remains for compatibility while `status.extensions` exposes both.
+The hosted dashboard now covers both published extensions from one page. It shows separate live Open VSX counters, versions and review counts, and side-by-side historical progression charts with no extension switcher. Promptr keeps the existing `downloads.jsonl` data path; Cognispec uses `downloads-cognispec.jsonl`. The legacy `status.openvsx` Promptr object remains for compatibility while `status.extensions` exposes both.
 
 The settings API returns and writes `github`, `imac` (Promptr iMac), and `cognispec` (Cognispec iMac) independently. Changing one iMac target preserves the other target's field. GitHub-hosted checks remain Promptr-only at the existing configured rate. The dashboard's combined value sums all configured targets and labels the GitHub card accordingly. Cognispec can be set to zero to disable its iMac checks without deleting its history.
 

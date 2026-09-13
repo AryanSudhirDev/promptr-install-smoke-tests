@@ -122,9 +122,9 @@ test('source failures are independent and explicitly mark cached data', async ()
   for (const source of ['history', 'live']) d.state.failures.add(source);
   await d.refresh();
   assert.match(d.el('stamp').textContent, /Live refresh failed.*Cached reading/);
-  assert.match(d.el('chart-note').textContent, /History refresh failed/);
+  assert.match(d.el('chart-note-promptr').textContent, /History refresh failed/);
   assert.match(d.el('gh-stats').textContent, /Stale/);
-  assert.ok(d.run('chartPoints.length') > 0);
+  assert.ok(d.run('chartPoints.promptr.length') > 0);
 });
 
 test('authoritative settings override snapshots while dirty inputs survive refresh', async () => {
@@ -225,7 +225,7 @@ test('numbers and dates are sanitized before charts and status rendering', async
   d.state.history.push({ at: '<script>', downloadCount: 200 }, { at: iso(-10), downloadCount: '999' });
   await d.refresh();
   assert.doesNotMatch(d.el('gh-stats').textContent, /<img/);
-  assert.doesNotMatch(d.el('chart').innerHTML, /<script|NaN|Infinity/);
+  assert.doesNotMatch(d.el('chart-promptr').innerHTML, /<script|NaN|Infinity/);
   assert.equal(d.el('extra').textContent, '');
 });
 
@@ -252,30 +252,32 @@ test('decreases and unchanged observations survive; missing capture hours are un
   d.run('addLivePoint({at:"2026-09-06T11:59:59Z",downloadCount:900,live:true})');
   assert.equal(d.run('livePoints().length'), 2);
   assert.equal(d.run('livePoints()[0].at'), original);
-  assert.ok(d.run('chartPoints.some(p => p.label.includes("1,000"))'));
-  assert.ok(d.run('barPoints.some(p => p.label.includes("-100"))'));
-  assert.ok(d.run('barPoints.some(p => p.label.includes("unknown"))'));
-  assert.match(d.el('chart-note').textContent, /later capture hour/);
+  assert.ok(d.run('chartPoints.promptr.some(p => p.label.includes("1,000"))'));
+  assert.ok(d.run('barPoints.promptr.some(p => p.label.includes("-100"))'));
+  assert.ok(d.run('barPoints.promptr.some(p => p.label.includes("unknown"))'));
+  assert.match(d.el('chart-note-promptr').textContent, /later capture hour/);
   d.state.live.downloadCount = 800; await d.refresh();
   assert.ok(d.run('livePoints().some(p => p.downloadCount === 900)'));
 });
 
 test('keyboard tooltips include year and timezone; empty charts clear interaction state', async () => {
   const d = await dashboard();
-  for (const id of ['chart', 'bars']) {
+  for (const id of ['chart-promptr', 'bars-promptr', 'chart-cognispec', 'bars-cognispec']) {
     assert.equal(d.el(id).getAttribute('tabindex'), '0');
     d.el(id).dispatch('focus'); assert.match(d.el('tip').textContent, /2026.*P[DS]T/);
     d.el(id).dispatch('keydown', { key: 'End' }); assert.equal(d.el('tip').style.display, 'block');
     d.el(id).dispatch('keydown', { key: 'ArrowLeft' });
     d.el(id).dispatch('keydown', { key: 'Escape' }); assert.equal(d.el('tip').style.display, 'none');
   }
-  d.run('drawHistory([]); drawProjection([])');
-  assert.equal(d.run('chartPoints.length + barPoints.length'), 0);
-  assert.equal(d.el('win').children.length, 0);
-  assert.equal(d.el('bars').innerHTML, '');
-  assert.equal(d.el('proj').children.length, 0);
-  d.el('chart').dispatch('keydown', { key: 'ArrowRight' }); assert.equal(d.el('tip').style.display, 'none');
-  assert.match(d.el('proj-note').textContent, /not a forecast or guarantee/);
+  d.run("for (const target of Object.keys(TREND_VIEWS)) { drawHistory([], target); drawProjection([], target); }");
+  assert.equal(d.run('chartPoints.promptr.length + barPoints.promptr.length + chartPoints.cognispec.length + barPoints.cognispec.length'), 0);
+  for (const target of ['promptr', 'cognispec']) {
+    assert.equal(d.el('win-' + target).children.length, 0);
+    assert.equal(d.el('bars-' + target).innerHTML, '');
+    assert.equal(d.el('proj-' + target).children.length, 0);
+  }
+  d.el('chart-promptr').dispatch('keydown', { key: 'ArrowRight' }); assert.equal(d.el('tip').style.display, 'none');
+  assert.match(d.el('proj-note-promptr').textContent, /not a forecast or guarantee/);
 });
 
 test('Pacific timestamps switch automatically between daylight and standard time', async () => {
@@ -283,17 +285,19 @@ test('Pacific timestamps switch automatically between daylight and standard time
   assert.match(d.run("when('2026-09-05T12:00:00Z')"), /05:00 AM PDT/);
   assert.match(d.run("when('2026-01-05T12:00:00Z')"), /04:00 AM PST/);
 });
-test('Cognispec counter, settings card, and history are independently rendered', async () => {
+test('both extension trends render together without a chart switcher', async () => {
   const d = await dashboard();
   assert.equal(d.el('cog-dl').textContent, '190');
   assert.match(d.el('cog-ver').textContent, /v4/);
   assert.equal(d.el('cs-total').value, '5');
   assert.equal(d.el('combined').textContent, '75');
-  assert.match(d.el('chart-note').textContent, /Promptr/);
-  d.run('selectChart("cognispec")');
-  assert.match(d.el('chart-note').textContent, /Cognispec/);
-  assert.equal(d.el('show-cognispec').getAttribute('aria-pressed'), 'true');
-  assert.ok(d.run('chartPoints.some(p => p.label.includes("190"))'));
+  assert.match(d.el('chart-note-promptr').textContent, /Promptr/);
+  assert.match(d.el('chart-note-cognispec').textContent, /Cognispec/);
+  assert.equal(d.el('show-cognispec'), null);
+  assert.ok(d.run('chartPoints.promptr.some(p => p.label.includes("900"))'));
+  assert.ok(d.run('chartPoints.cognispec.some(p => p.label.includes("190"))'));
+  assert.ok(d.el('chart-promptr').innerHTML.length > 0);
+  assert.ok(d.el('chart-cognispec').innerHTML.length > 0);
 });
 test('Cognispec setting saves through the same key-protected API', async () => {
   const d = await dashboard(); key(d); enter(d, 'cs-total', '1189'); await d.run('save("cognispec")');
