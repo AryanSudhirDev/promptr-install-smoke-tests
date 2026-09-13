@@ -17,17 +17,21 @@ function runChecked(command, args, options = {}) {
 
 (async () => {
   const root = __dirname;
+  const targetId = process.env.TARGET_EXTENSION || 'aryansudhir.promptr';
+  const targetName = targetId.split('.')[1];
+  assert(['aryansudhir.promptr','aryansudhir.cognispec'].includes(targetId), 'Unsupported QA target');
   const resultDir = path.join(root, 'results');
   const stateDir = path.join(root, 'state');
   const userDir = path.join(stateDir, 'user');
   const extensionsDir = path.join(stateDir, 'extensions');
-  const vsix = path.join(root, 'input', 'promptr.vsix');
+  const vsix = path.join(root, 'input', targetName + '.vsix');
   const variant = process.env.TEST_VARIANT || 'unknown';
   const executable = process.env.VSCODE_EXECUTABLE || '/usr/share/code/code';
   fs.mkdirSync(resultDir, {recursive: true});
   fs.mkdirSync(path.join(root, 'input'), {recursive: true});
   // Fresh download from the registry, inside this brand-new container.
-  const registryUrl = 'https://open-vsx.org/api/aryansudhir/promptr';
+  assert(!fs.existsSync(vsix), 'VSIX must not be present before this fresh download');
+  const registryUrl = 'https://open-vsx.org/api/aryansudhir/' + targetName;
   const registryFetch = createRegistryFetch({stateDir: process.env.REGISTRY_LIMIT_DIR, reportDir: resultDir, runId: process.env.TEST_RUN});
   const fetchOk = async (url) => { const r = await registryFetch(url); assert(r.ok, url + ' -> HTTP ' + r.status); return r; };
   const registry = await (await fetchOk(registryUrl)).json();
@@ -45,6 +49,7 @@ function runChecked(command, args, options = {}) {
   assert(fs.existsSync(executable), `VS Code executable missing at ${executable}`);
 
   const artifact = {
+    targetId,
     source: registry.files.download,
     downloadStart, downloadEnd,
     environment: 'imac-colima-container',
@@ -58,11 +63,11 @@ function runChecked(command, args, options = {}) {
   assert.equal(artifact.sha256, expectedHash, 'Downloaded VSIX hash does not match the published Open VSX hash');
   runChecked('unzip', ['-t', vsix]);
   const manifest = JSON.parse(runChecked('unzip', ['-p', vsix, 'extension/package.json']));
-  assert.equal(manifest.publisher + '.' + manifest.name, 'aryansudhir.promptr');
+  assert.equal(manifest.publisher + '.' + manifest.name, targetId);
   assert.equal(manifest.version, expectedVersion);
   assert.equal(manifest.main, './dist/extension.js');
   assert(manifest.engines?.vscode, 'VSIX is missing a VS Code engine requirement');
-  assert.equal(manifest.activationEvents?.[0], 'onStartupFinished');
+  assert(manifest.activationEvents?.includes(targetName === 'promptr' ? 'onStartupFinished' : 'onCommand:cognispec.createStudy'), 'Expected activation trigger missing');
   fs.writeFileSync(path.join(resultDir, 'download.json'), JSON.stringify({...artifact, manifest}, null, 2));
 
   fs.mkdirSync(path.join(userDir, 'User'), {recursive: true});
@@ -82,12 +87,12 @@ function runChecked(command, args, options = {}) {
   const before = command(['--list-extensions']);
   assert.equal(before, '', `Fresh extension directory was not empty: ${before}`);
   const installOutput = command(['--install-extension', vsix]);
-  const installedLine = `aryansudhir.promptr@${expectedVersion}`.toLowerCase();
+  const installedLine = `${targetId}@${expectedVersion}`.toLowerCase();
   const listInstalled = () => command(['--list-extensions', '--show-versions']).toLowerCase().split(/\r?\n/);
   assert(listInstalled().includes(installedLine), `Published extension was not installed: ${listInstalled().join(',')}`);
   const lifecycle = [];
   if (variant === 'reinstall') {
-    command(['--uninstall-extension', 'aryansudhir.promptr']);
+    command(['--uninstall-extension', targetId]);
     assert(!listInstalled().includes(installedLine), 'Extension remained installed after uninstall');
     command(['--install-extension', vsix]);
     assert(listInstalled().includes(installedLine), 'Extension did not return after reinstall');
@@ -100,7 +105,7 @@ function runChecked(command, args, options = {}) {
     lifecycle.push({secondInstall: true, uniqueListings: matches.length});
   }
   const vscodeVersion = command(['--version']);
-  const installation = {variant, expectedVersion, environment: 'imac-colima-container', container: artifact.container, freshStateBeforeInstall: true, artifactSha256: artifact.sha256, installed: listInstalled(), vscodeVersion, installOutput, lifecycle};
+  const installation = {targetId, variant, expectedVersion, environment: 'imac-colima-container', container: artifact.container, freshStateBeforeInstall: true, artifactSha256: artifact.sha256, installed: listInstalled(), vscodeVersion, installOutput, lifecycle};
   fs.writeFileSync(path.join(resultDir, 'installation.json'), JSON.stringify(installation, null, 2));
   console.log(JSON.stringify({artifact, installation}, null, 2));
 

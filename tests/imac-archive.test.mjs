@@ -21,3 +21,10 @@ test('unsafe report links abort archival and retain source',()=>{
  assert.throws(()=>archiveReports(root),/symlink/);assert.ok(fs.existsSync(path.join(root,'reports','old')));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('namespaced Cognispec completed reports are archived from their own ledger',()=>{
+ const root=fs.mkdtempSync(path.join(process.env.QA_TEST_TMP||os.tmpdir(),'cognispec-archive-'));try{
+ const id='cognispec-v2-20260913T1702-0';fs.mkdirSync(path.join(root,'reports',id),{recursive:true});fs.writeFileSync(path.join(root,'reports',id,'checks.json'),'{}');
+ fs.writeFileSync(path.join(root,'scheduler-cognispec-v2.json'),JSON.stringify({jobs:{[id]:{status:'passed',finishedAt:new Date(Date.now()-2*86400000).toISOString()}}}));
+ const result=archiveReports(root);assert.equal(result[0].reports,1);assert.equal(fs.existsSync(path.join(root,'reports',id)),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

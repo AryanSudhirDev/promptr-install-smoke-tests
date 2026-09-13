@@ -1,4 +1,5 @@
 {
   "imacDailyTotal": 1400,
-  "note": "Set from the hosted dashboard. The iMac monitor reads this each run; local config.json is the fallback."
+  "note": "Planned fresh-install QA checks per day, not a promised public download count. Both iMac targets share concurrency and registry pacing.",
+  "cognispecDailyTotal": 1189
 }

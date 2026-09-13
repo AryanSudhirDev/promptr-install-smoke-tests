@@ -27,7 +27,7 @@ export function archiveReports(root=here, now=Date.now()) {
   try{fs.writeFileSync(lock,String(process.pid),{flag:'wx'});}catch(e){if(e.code==='EEXIST')throw new Error('archive lock exists; inspect before retrying');throw e;}
   const results=[];
   try {
-    let ledger={};for(const file of ['attempted.json','scheduler-v2.json']){
+    let ledger={};for(const file of ['attempted.json','scheduler-v2.json','scheduler-cognispec-v2.json']){
       if(fs.existsSync(path.join(root,file))){const j=JSON.parse(fs.readFileSync(path.join(root,file)));Object.assign(ledger,j.jobs||j);}
     }
     const groups=new Map();
