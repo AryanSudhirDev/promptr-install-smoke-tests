@@ -4,9 +4,12 @@
   "version": "1.0.0",
   "scripts": {
     "test": "node run-test.cjs",
-    "test:dashboard": "node --test tests/*.test.mjs"
+    "test:dashboard": "node --test tests/*.test.mjs",
+    "test:layout": "node tests/layout.browser.mjs"
   },
   "devDependencies": {
-    "@vscode/test-electron": "3.1.0"
+    "@vscode/test-electron": "3.1.0",
+    "axe-core": "4.10.3",
+    "playwright": "1.55.0"
   }
 }

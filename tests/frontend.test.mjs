@@ -255,7 +255,7 @@ test('decreases and unchanged observations survive; missing capture hours are un
   assert.ok(d.run('chartPoints.promptr.some(p => p.label.includes("1,000"))'));
   assert.ok(d.run('barPoints.promptr.some(p => p.label.includes("-100"))'));
   assert.ok(d.run('barPoints.promptr.some(p => p.label.includes("unknown"))'));
-  assert.match(d.el('chart-note-promptr').textContent, /later capture hour/);
+  assert.match(html, /id="chart-guide">[^<]*later capture hour/);
   d.state.live.downloadCount = 800; await d.refresh();
   assert.ok(d.run('livePoints().some(p => p.downloadCount === 900)'));
 });
@@ -292,7 +292,7 @@ test('both extension trends render together without a chart switcher', async () 
   assert.equal(d.el('cs-total').value, '5');
   assert.equal(d.el('combined').textContent, '75');
   assert.match(d.el('chart-note-promptr').textContent, /Promptr/);
-  assert.match(d.el('chart-note-cognispec').textContent, /Cognispec/);
+  assert.match(d.el('chart-note-cognispec').textContent, /CogniSpec/);
   assert.equal(d.el('show-cognispec'), null);
   assert.ok(d.run('chartPoints.promptr.some(p => p.label.includes("900"))'));
   assert.ok(d.run('chartPoints.cognispec.some(p => p.label.includes("190"))'));
@@ -304,4 +304,42 @@ test('Cognispec setting saves through the same key-protected API', async () => {
   assert.equal(d.calls.filter(c => c.kind === 'post').length, 1);
   assert.deepEqual(JSON.parse(d.calls.find(c => c.kind === 'post').options.body), {target:'cognispec', total:1189});
   assert.match(d.el('cs-msg').textContent, /Accepted/);
+});
+
+
+test('touch and keyboard tooltips use real line breaks for both extensions', async () => {
+  const d = await dashboard();
+  for (const target of ['promptr', 'cognispec']) {
+    for (const kind of ['chart', 'bars']) {
+      const el = d.el(kind + '-' + target);
+      el.dispatch('pointerdown', { clientX: 400, clientY: 200, pointerType: 'touch' });
+      const text = d.el('tip').textContent;
+      assert.match(text, /\n/);
+      assert.doesNotMatch(text, /\\n/);
+      assert.match(text, target === 'promptr' ? /Promptr/ : /CogniSpec/);
+      el.dispatch('keydown', { key: 'Escape' });
+      assert.equal(d.el('tip').style.display, 'none');
+    }
+  }
+});
+
+test('snapshot metadata keeps versions when registry fetches fail', async () => {
+  const d = await dashboard();
+  d.state.failures.add('live');
+  d.state.status.updatedAt = iso(500);
+  await d.refresh();
+  assert.equal(d.el('ver').textContent, 'v1');
+  assert.equal(d.el('cog-ver').textContent, 'v3');
+  assert.match(d.el('cog-stamp').textContent, /Cached reading/);
+  assert.match(html, /Registry counts may lag and include QA traffic/);
+});
+
+test('redrawing one extension never clears the other extension’s charts', async () => {
+  const d = await dashboard();
+  const before = d.el('chart-cognispec').innerHTML;
+  d.run('drawHistory([], "promptr"); drawProjection([], "promptr")');
+  assert.equal(d.el('chart-cognispec').innerHTML, before);
+  assert.ok(d.run('chartPoints.cognispec.length') > 0);
+  assert.ok(d.run('barPoints.cognispec.length') > 0);
+  assert.equal(d.run('chartPoints.promptr.length'), 0);
 });

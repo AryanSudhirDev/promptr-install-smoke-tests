@@ -2,16 +2,16 @@ name: Dashboard regression tests
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', 'imac/**', '.github/workflows/dashboard-tests.yml']
+    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', 'imac/**', 'package*.json', '.github/workflows/dashboard-tests.yml']
   pull_request:
-    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', 'imac/**', '.github/workflows/dashboard-tests.yml']
+    paths: ['docs/**', 'api/**', 'scripts/publish-status.mjs', 'tests/**', 'imac/**', 'package*.json', '.github/workflows/dashboard-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   dashboard:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -20,3 +20,6 @@ jobs:
         with:
           node-version: '22'
       - run: npm run test:dashboard
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:layout
