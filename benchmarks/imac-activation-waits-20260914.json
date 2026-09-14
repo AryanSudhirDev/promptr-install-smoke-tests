@@ -1,0 +1,176 @@
+{
+  "mode": "offline-compute-benchmark",
+  "notPublicChecks": true,
+  "network": "none",
+  "concurrency": 2,
+  "results": [
+    {
+      "target": "promptr",
+      "variant": "manifest",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 11.151
+    },
+    {
+      "target": "promptr",
+      "variant": "manifest",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 11.167
+    },
+    {
+      "target": "cognispec",
+      "variant": "manifest",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 11.38
+    },
+    {
+      "target": "cognispec",
+      "variant": "manifest",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 11.398
+    },
+    {
+      "target": "promptr",
+      "variant": "clean-state",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 10.388
+    },
+    {
+      "target": "promptr",
+      "variant": "clean-state",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 10.552
+    },
+    {
+      "target": "cognispec",
+      "variant": "clean-state",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 9.572
+    },
+    {
+      "target": "cognispec",
+      "variant": "clean-state",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 10.383
+    },
+    {
+      "target": "promptr",
+      "variant": "settings-isolation",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 11.085
+    },
+    {
+      "target": "promptr",
+      "variant": "settings-isolation",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 11.264
+    },
+    {
+      "target": "cognispec",
+      "variant": "settings-isolation",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 10.659
+    },
+    {
+      "target": "cognispec",
+      "variant": "settings-isolation",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 10.835
+    },
+    {
+      "target": "promptr",
+      "variant": "ui-settings",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 13.16
+    },
+    {
+      "target": "promptr",
+      "variant": "ui-settings",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 13.338
+    },
+    {
+      "target": "cognispec",
+      "variant": "ui-settings",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 11.646
+    },
+    {
+      "target": "cognispec",
+      "variant": "ui-settings",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 11.749
+    },
+    {
+      "target": "promptr",
+      "variant": "reinstall",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 13.999
+    },
+    {
+      "target": "promptr",
+      "variant": "reinstall",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 14.015
+    },
+    {
+      "target": "cognispec",
+      "variant": "reinstall",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 13.287
+    },
+    {
+      "target": "cognispec",
+      "variant": "reinstall",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 13.481
+    },
+    {
+      "target": "promptr",
+      "variant": "duplicate-install",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 11.402
+    },
+    {
+      "target": "promptr",
+      "variant": "duplicate-install",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 11.745
+    },
+    {
+      "target": "cognispec",
+      "variant": "duplicate-install",
+      "flavor": "readiness",
+      "status": "passed",
+      "seconds": 11.403
+    },
+    {
+      "target": "cognispec",
+      "variant": "duplicate-install",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 11.727
+    }
+  ]
+}

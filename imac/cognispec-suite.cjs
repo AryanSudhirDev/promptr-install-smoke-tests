@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
+const {waitForSetting} = require('./wait-for-setting.cjs');
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const notTested = [
@@ -76,10 +77,10 @@ exports.run = async () => {
     assert.equal(config.get('jsPsychVersion'), '8.2.1', 'Unexpected clean-install jsPsychVersion');
     assert.equal(config.inspect('jsPsychVersion')?.defaultValue, '8.2.1', 'Unexpected effective jsPsychVersion default');
     await config.update('jsPsychVersion', '8.2.2', vscode.ConfigurationTarget.Global);
-    await delay(200);
+    await waitForSetting(() => vscode.workspace.getConfiguration('cognispec').get('jsPsychVersion'), '8.2.2');
     assert.equal(vscode.workspace.getConfiguration('cognispec').get('jsPsychVersion'), '8.2.2', 'jsPsychVersion setting did not persist');
     await config.update('jsPsychVersion', undefined, vscode.ConfigurationTarget.Global);
-    await delay(200);
+    await waitForSetting(() => vscode.workspace.getConfiguration('cognispec').get('jsPsychVersion'), '8.2.1');
     assert.equal(vscode.workspace.getConfiguration('cognispec').get('jsPsychVersion'), '8.2.1', 'jsPsychVersion setting did not reset');
     record('jsPsychVersion default and round-trip', {default: '8.2.1', updated: '8.2.2', reset: true});
 

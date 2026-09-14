@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
+const {waitForSetting} = require('./wait-for-setting.cjs');
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -44,10 +45,10 @@ exports.run = async () => {
     assert.equal(temperatureInspect?.defaultValue, 0.3, 'Temperature schema default changed');
     assert.equal(contextInspect?.defaultValue, '', 'Custom context schema default changed');
     await config.update('temperature', 0.6, vscode.ConfigurationTarget.Global);
-    await delay(200);
+    await waitForSetting(() => vscode.workspace.getConfiguration('promptr').get('temperature'), 0.6);
     assert.equal(vscode.workspace.getConfiguration('promptr').get('temperature'), 0.6, 'Temperature setting did not persist');
     await config.update('temperature', undefined, vscode.ConfigurationTarget.Global);
-    await delay(200);
+    await waitForSetting(() => vscode.workspace.getConfiguration('promptr').get('temperature'), 0.3);
     assert.equal(vscode.workspace.getConfiguration('promptr').get('temperature'), 0.3, 'Temperature setting did not reset');
     record('Clean defaults and temperature round-trip', {temperature: 0.3, customContext: '', changedAndReset: true});
 
@@ -78,10 +79,10 @@ exports.run = async () => {
       const properties = Object.keys(target.packageJSON.contributes?.configuration?.properties || {});
       for (const property of expectedProperties) assert(properties.includes(property), `Missing settings property: ${property}`);
       await config.update('customContext', 'temporary clean-profile value', vscode.ConfigurationTarget.Global);
-      await delay(200);
+      await waitForSetting(() => vscode.workspace.getConfiguration('promptr').get('customContext'), 'temporary clean-profile value');
       assert.equal(vscode.workspace.getConfiguration('promptr').get('customContext'), 'temporary clean-profile value');
       await config.update('customContext', undefined, vscode.ConfigurationTarget.Global);
-      await delay(200);
+      await waitForSetting(() => vscode.workspace.getConfiguration('promptr').get('customContext'), '');
       assert.equal(vscode.workspace.getConfiguration('promptr').get('customContext'), '');
       assert.equal(vscode.workspace.getConfiguration('promptr').get('autoValidate'), true);
       record('Settings schema isolation and custom-context round-trip', {properties: expectedProperties, customContextReset: true, autoValidate: true});

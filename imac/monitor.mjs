@@ -83,7 +83,7 @@ async function run({job,store}){
   const r=await exec('docker',['run','--rm','--name',name,'--memory','2g','--shm-size','512m',
    '-e','TARGET_EXTENSION='+store.id,'-e','REGISTRY_LIMIT_DIR=/opt/check/registry-limit','-e','TEST_VARIANT='+variant,'-e','TEST_RUN='+job.id,'-e','DAILY_PLAN_DATE='+new Date(job.slot).toISOString().slice(0,10),
    '-v',limiterDir+':/opt/check/registry-limit','-v',path.join(here,'registry-fetch.cjs')+':/opt/check/registry-fetch.cjs:ro',
-   '-v',path.join(here,'container-check.cjs')+':/opt/check/container-check.cjs:ro','-v',path.join(here,'install-lifecycle.cjs')+':/opt/check/install-lifecycle.cjs:ro','-v',out+':/opt/check/results','-v',path.join(here,store.suite)+':/opt/check/extended-suite.cjs:ro',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:5*60000});
+   '-v',path.join(here,'container-check.cjs')+':/opt/check/container-check.cjs:ro','-v',path.join(here,'install-lifecycle.cjs')+':/opt/check/install-lifecycle.cjs:ro','-v',path.join(here,'wait-for-setting.cjs')+':/opt/check/wait-for-setting.cjs:ro','-v',out+':/opt/check/results','-v',path.join(here,store.suite)+':/opt/check/extended-suite.cjs:ro',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:5*60000});
   fs.writeFileSync(path.join(out,'container.log'),r.stdout+'\n--- stderr ---\n'+r.stderr);
   if(!r.stdout.includes(store.marker))throw new Error('target test success marker missing');job.status='passed';
  }catch(e){
