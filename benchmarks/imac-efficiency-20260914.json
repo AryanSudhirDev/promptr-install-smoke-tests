@@ -1,0 +1,260 @@
+{
+  "mode": "offline-compute-benchmark",
+  "notPublicChecks": true,
+  "network": "none",
+  "concurrency": 3,
+  "results": [
+    {
+      "target": "promptr",
+      "variant": "manifest",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 13.811
+    },
+    {
+      "target": "promptr",
+      "variant": "manifest",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 14.359
+    },
+    {
+      "target": "promptr",
+      "variant": "manifest",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 14.602
+    },
+    {
+      "target": "cognispec",
+      "variant": "manifest",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 13.68
+    },
+    {
+      "target": "cognispec",
+      "variant": "manifest",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 13.693
+    },
+    {
+      "target": "cognispec",
+      "variant": "manifest",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 14.394
+    },
+    {
+      "target": "promptr",
+      "variant": "clean-state",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 13.642
+    },
+    {
+      "target": "promptr",
+      "variant": "clean-state",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 13.849
+    },
+    {
+      "target": "promptr",
+      "variant": "clean-state",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 14.321
+    },
+    {
+      "target": "cognispec",
+      "variant": "clean-state",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 13.834
+    },
+    {
+      "target": "cognispec",
+      "variant": "clean-state",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 13.857
+    },
+    {
+      "target": "cognispec",
+      "variant": "clean-state",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 14.752
+    },
+    {
+      "target": "promptr",
+      "variant": "settings-isolation",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 14.776
+    },
+    {
+      "target": "promptr",
+      "variant": "settings-isolation",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 15.069
+    },
+    {
+      "target": "promptr",
+      "variant": "settings-isolation",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 15.192
+    },
+    {
+      "target": "cognispec",
+      "variant": "settings-isolation",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 12.747
+    },
+    {
+      "target": "cognispec",
+      "variant": "settings-isolation",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 13.569
+    },
+    {
+      "target": "cognispec",
+      "variant": "settings-isolation",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 13.902
+    },
+    {
+      "target": "promptr",
+      "variant": "ui-settings",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 15.46
+    },
+    {
+      "target": "promptr",
+      "variant": "ui-settings",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 15.934
+    },
+    {
+      "target": "promptr",
+      "variant": "ui-settings",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 16.394
+    },
+    {
+      "target": "cognispec",
+      "variant": "ui-settings",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 16.251
+    },
+    {
+      "target": "cognispec",
+      "variant": "ui-settings",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 16.481
+    },
+    {
+      "target": "cognispec",
+      "variant": "ui-settings",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 16.668
+    },
+    {
+      "target": "promptr",
+      "variant": "reinstall",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 15.468
+    },
+    {
+      "target": "promptr",
+      "variant": "reinstall",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 15.71
+    },
+    {
+      "target": "promptr",
+      "variant": "reinstall",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 16.13
+    },
+    {
+      "target": "cognispec",
+      "variant": "reinstall",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 14.615
+    },
+    {
+      "target": "cognispec",
+      "variant": "reinstall",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 15.241
+    },
+    {
+      "target": "cognispec",
+      "variant": "reinstall",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 15.536
+    },
+    {
+      "target": "promptr",
+      "variant": "duplicate-install",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 14.231
+    },
+    {
+      "target": "promptr",
+      "variant": "duplicate-install",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 14.892
+    },
+    {
+      "target": "promptr",
+      "variant": "duplicate-install",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 15.532
+    },
+    {
+      "target": "cognispec",
+      "variant": "duplicate-install",
+      "flavor": "ram",
+      "status": "passed",
+      "seconds": 14.715
+    },
+    {
+      "target": "cognispec",
+      "variant": "duplicate-install",
+      "flavor": "optimized",
+      "status": "passed",
+      "seconds": 15.364
+    },
+    {
+      "target": "cognispec",
+      "variant": "duplicate-install",
+      "flavor": "baseline",
+      "status": "passed",
+      "seconds": 15.694
+    }
+  ]
+}

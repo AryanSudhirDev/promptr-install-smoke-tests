@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const cp = require('node:child_process');
 const crypto = require('node:crypto');
 const {createRegistryFetch} = require('./registry-fetch.cjs');
+const {verifyInstallation} = require('./install-lifecycle.cjs');
 const {resolveCliArgsFromVSCodeExecutablePath, runTests} = require('@vscode/test-electron');
 
 function runChecked(command, args, options = {}) {
@@ -29,6 +30,11 @@ function runChecked(command, args, options = {}) {
   const executable = process.env.VSCODE_EXECUTABLE || '/usr/share/code/code';
   fs.mkdirSync(resultDir, {recursive: true});
   fs.mkdirSync(path.join(root, 'input'), {recursive: true});
+  const started = performance.now();
+  let stageStarted = started;
+  const timings = {schemaVersion: 1, runId: process.env.TEST_RUN, targetId, variant, status: 'failed', stagesMs: {}, cli: []};
+  const finishStage = name => { const now = performance.now(); timings.stagesMs[name] = Math.round(now - stageStarted); stageStarted = now; };
+  try {
   // Fresh download from the registry, inside this brand-new container.
   assert(!fs.existsSync(vsix), 'VSIX must not be present before this fresh download');
   const registryUrl = 'https://open-vsx.org/api/aryansudhir/' + targetName;
@@ -41,6 +47,7 @@ function runChecked(command, args, options = {}) {
   const downloadStart = new Date().toISOString();
   fs.writeFileSync(vsix, Buffer.from(await (await fetchOk(registry.files.download)).arrayBuffer()));
   const downloadEnd = new Date().toISOString();
+  finishStage('registry');
 
   // A fresh sandbox has no prior VS Code state. Anything here means the environment is not clean.
   assert(!fs.existsSync(stateDir), `Expected a clean sandbox, but found ${stateDir}`);
@@ -69,6 +76,7 @@ function runChecked(command, args, options = {}) {
   assert(manifest.engines?.vscode, 'VSIX is missing a VS Code engine requirement');
   assert(manifest.activationEvents?.includes(targetName === 'promptr' ? 'onStartupFinished' : 'onCommand:cognispec.createStudy'), 'Expected activation trigger missing');
   fs.writeFileSync(path.join(resultDir, 'download.json'), JSON.stringify({...artifact, manifest}, null, 2));
+  finishStage('artifactVerification');
 
   fs.mkdirSync(path.join(userDir, 'User'), {recursive: true});
   fs.mkdirSync(extensionsDir, {recursive: true});
@@ -83,31 +91,18 @@ function runChecked(command, args, options = {}) {
   }));
   const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executable);
   const common = ['--user-data-dir', userDir, '--extensions-dir', extensionsDir, '--disable-telemetry', '--no-sandbox'];
-  const command = (args) => runChecked(cli, [...cliArgs, ...common, ...args]);
-  const before = command(['--list-extensions']);
-  assert.equal(before, '', `Fresh extension directory was not empty: ${before}`);
-  const installOutput = command(['--install-extension', vsix]);
-  const installedLine = `${targetId}@${expectedVersion}`.toLowerCase();
-  const listInstalled = () => command(['--list-extensions', '--show-versions']).toLowerCase().split(/\r?\n/);
-  assert(listInstalled().includes(installedLine), `Published extension was not installed: ${listInstalled().join(',')}`);
-  const lifecycle = [];
-  if (variant === 'reinstall') {
-    command(['--uninstall-extension', targetId]);
-    assert(!listInstalled().includes(installedLine), 'Extension remained installed after uninstall');
-    command(['--install-extension', vsix]);
-    assert(listInstalled().includes(installedLine), 'Extension did not return after reinstall');
-    lifecycle.push({uninstalled: true, reinstalled: true});
-  }
-  if (variant === 'duplicate-install') {
-    command(['--install-extension', vsix]);
-    const matches = listInstalled().filter(line => line === installedLine);
-    assert.equal(matches.length, 1, `Repeated install created an unexpected extension listing`);
-    lifecycle.push({secondInstall: true, uniqueListings: matches.length});
-  }
-  const vscodeVersion = command(['--version']);
-  const installation = {targetId, variant, expectedVersion, environment: 'imac-colima-container', container: artifact.container, freshStateBeforeInstall: true, artifactSha256: artifact.sha256, installed: listInstalled(), vscodeVersion, installOutput, lifecycle};
+  finishStage('profileSetup');
+  const command = args => {
+    const begin = performance.now();
+    let ok = false;
+    try { const output = runChecked(cli, [...cliArgs, ...common, ...args]); ok = true; return output; }
+    finally { timings.cli.push({operation: args[0], ms: Math.round(performance.now() - begin), ok}); }
+  };
+  const verified = verifyInstallation({command, targetId, expectedVersion, variant, vsix});
+  const installation = {targetId, variant, expectedVersion, environment: 'imac-colima-container', container: artifact.container, freshStateBeforeInstall: true, artifactSha256: artifact.sha256, ...verified};
   fs.writeFileSync(path.join(resultDir, 'installation.json'), JSON.stringify(installation, null, 2));
   console.log(JSON.stringify({artifact, installation}, null, 2));
+  finishStage('cliLifecycle');
 
   try {
     await runTests({
@@ -117,8 +112,16 @@ function runChecked(command, args, options = {}) {
       extensionTestsEnv: {RESULTS_DIR: resultDir, TEST_VARIANT: variant, TEST_RUN: process.env.TEST_RUN || variant, EXPECTED_VSIX_VERSION: expectedVersion},
       launchArgs: [...common, '--skip-welcome', '--skip-release-notes', '--disable-workspace-trust', '--disable-gpu'],
     });
+    timings.status = 'passed';
   } finally {
+    finishStage('activationSuite');
     const logs = path.join(userDir, 'logs');
     try { if (fs.existsSync(logs)) fs.cpSync(logs, path.join(resultDir, 'vscode-logs'), {recursive: true, force: true, errorOnExist: false}); } catch (e) { console.warn('log copy skipped:', e.code || e.message); }
+    finishStage('logCollection');
+  }
+  } finally {
+    timings.totalMs = Math.round(performance.now() - started);
+    timings.unattributedMs = Math.round(performance.now() - stageStarted);
+    fs.writeFileSync(path.join(resultDir, 'timings.json'), JSON.stringify(timings, null, 2));
   }
 })().catch((error) => { console.error(error); process.exitCode = 1; });
