@@ -6,7 +6,7 @@ import {run} from './exec.mjs';
 import {ROOT,DOCKER,workerStatus} from './runtime.mjs';
 const SOURCE=fileURLToPath(new URL('../',import.meta.url));
 export function buildContext(destination,source=SOURCE){
- fs.mkdirSync(destination,{recursive:true,mode:0o700});const entries=['package.json','package-lock.json','helper/package.json','helper/index.cjs','macbook/Dockerfile','macbook/entrypoint.sh','macbook/relayed-registry.cjs',...fs.readdirSync(path.join(source,'imac')).filter(n=>n.endsWith('.cjs')).map(n=>'imac/'+n)];
+ fs.mkdirSync(destination,{recursive:true,mode:0o700});const entries=['package.json','package-lock.json','helper/package.json','helper/index.cjs','macbook/Dockerfile','macbook/entrypoint.sh','macbook/relayed-registry.cjs','macbook/promptr-arm64-suite.cjs','macbook/cognispec-arm64-suite.cjs',...fs.readdirSync(path.join(source,'imac')).filter(n=>n.endsWith('.cjs')).map(n=>'imac/'+n)];
  const h=crypto.createHash('sha256');for(const relative of entries.sort()){const bytes=fs.readFileSync(path.join(source,relative));h.update(relative).update(bytes);const out=path.join(destination,relative);fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,bytes);}
  const check=path.join(destination,'imac/container-check.cjs');let text=fs.readFileSync(check,'utf8');
  for(const required of ["const downloadStart = new Date().toISOString();","const downloadEnd = new Date().toISOString();","environment: 'imac-colima-container'","const root = __dirname;"])if(!text.includes(required))throw new Error('Harness relay integration requires review');

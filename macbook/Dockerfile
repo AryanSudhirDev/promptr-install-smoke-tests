@@ -15,6 +15,7 @@ WORKDIR /opt/check
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY imac/*.cjs ./
+COPY macbook/promptr-arm64-suite.cjs macbook/cognispec-arm64-suite.cjs ./
 COPY helper ./helper
 COPY macbook/relayed-registry.cjs ./registry-fetch.cjs
 COPY macbook/entrypoint.sh ./entrypoint.sh
