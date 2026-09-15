@@ -7,6 +7,8 @@ export const LEASE_MS=10*60*1000;
 // This is the iMac-local cap (and remains the legacy root cap), not a fleet cap.
 export const GLOBAL_CHECK_CAP=3;
 export const MACBOOK_REMOTE_LEASE_CAP=11;
+export const MAX_LOCAL_PREPARED=2;
+export const MAX_MACBOOK_PREPARING=3;
 export const COMPLETE_INPUT_LIMIT=32*1024*1024;
 export const MAX_BUNDLE_BYTES=32*1024*1024;
 export const MAX_VSIX_BYTES=23*1024*1024;
@@ -80,14 +82,31 @@ export function reserveLocalJob(stores,jobId,{now=Date.now(),activeLocalContaine
  return {started:true,store,job,variant,capacity};
 }
 
+export function reserveLocalPreparation(stores,jobId,{now=Date.now()}={}){
+ const selected=jobsOf(stores).find(({job})=>job.id===jobId);
+ if(!selected||selected.job.status!=='pending')return {reserved:false,reason:'not_pending'};
+ if(jobsOf(stores).filter(({job})=>['preparing','ready'].includes(job.status)&&job.remoteHost!=='macbook').length>=MAX_LOCAL_PREPARED)return {reserved:false,reason:'prefetch_capacity'};
+ const {store,job}=selected;Object.assign(job,{target:store.key,status:'preparing',startedAt:new Date(now).toISOString()});delete job.remoteHost;
+ return {reserved:true,store,job,variant:variantForJob(job)};
+}
+export function startPreparedLocalJob(stores,jobId,{now=Date.now(),activeLocalContainers=0}={}){
+ const selected=jobsOf(stores).find(({job})=>job.id===jobId);
+ if(!selected||selected.job.status!=='ready')return {started:false,reason:'not_ready'};
+ if(!/^[a-f0-9]{64}$/.test(selected.job.artifactSha256||'')||!selected.job.expectedVersion||!selected.job.downloadEnd)throw new LeaseError('UNVERIFIED_ARTIFACT','Prepared job lacks verified download evidence');
+ const capacity=remoteCapacity(stores,{now,activeLocalContainers});if(capacity.remaining<1)return {started:false,reason:'capacity'};
+ Object.assign(selected.job,{status:'started',testStartedAt:new Date(now).toISOString()});
+ return {started:true,...selected,variant:variantForJob(selected.job),capacity};
+}
 export function createLeaseToken(randomBytes=crypto.randomBytes){
  const token=randomBytes(32).toString('base64url');
  if(!/^[A-Za-z0-9_-]{43}$/.test(token))throw new LeaseError('TOKEN_GENERATION_FAILED','Could not generate a lease token');
  return token;
 }
 
-export function reserveRemoteLease(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0,leaseToken=createLeaseToken(),remoteLeaseCap=1,includeLocalActivity=true}={}){
+export function reserveRemoteLease(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0,leaseToken=createLeaseToken(),remoteLeaseCap=1,includeLocalActivity=true,maxPreparing=Infinity}={}){
  expireRemoteLeases(stores,now);
+ if(!(maxPreparing===Infinity||Number.isInteger(maxPreparing)&&maxPreparing>0))throw new LeaseError('INVALID_ACTIVITY','Invalid preparation limit');
+ if(activeRemoteLeases(stores).filter(({job})=>job.status==='remote_started'&&!job.artifactSha256).length>=maxPreparing)throw new LeaseError('REMOTE_ACTIVE','Fresh download preparation slots are busy',{retryAfterMs:2000});
  if(!Number.isInteger(remoteLeaseCap)||remoteLeaseCap<1)throw new LeaseError('INVALID_ACTIVITY','Invalid remote lease limit');
  const capacity=remoteCapacity(stores,{now,activeLocalContainers,externalRemoteCount,cap:includeLocalActivity?GLOBAL_CHECK_CAP:remoteLeaseCap,includeLocalActivity});
  if(capacity.remote>=remoteLeaseCap){

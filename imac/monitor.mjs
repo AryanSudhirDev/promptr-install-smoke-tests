@@ -7,9 +7,11 @@ import {validTotal} from './schedule.mjs';
 import {TARGETS,selectJobs,diskAllowsStart} from './multi-plan.mjs';
 import {
  GLOBAL_CHECK_CAP,LeaseError,acquirePidLock,activeRemoteLeases,advanceTargetWithRemoteFencing,
- expireRemoteLeases,ledgerLocalActivity,reserveLocalJob,
+ expireRemoteLeases,ledgerLocalActivity,reserveLocalPreparation,startPreparedLocalJob,
 } from './macbook-lease.mjs';
 import registryLimiter from './registry-fetch.cjs';
+import {prepareFreshRelay,relayDirectory,removeJobRelay} from './fresh-relay.mjs';
+import {runCheckPipeline} from './check-pipeline.mjs';
 import {prepareSharedLimiter} from './limiter-preflight.mjs';
 const {readState:readLimiterState,SPACING_MS}=registryLimiter;
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -23,10 +25,11 @@ catch(error){if(error instanceof LeaseError&&error.code==='BUSY'){console.log('[
 process.on('exit',()=>{try{releaseProcess();}catch{}});
 
 async function withStateLock(action){
+ const deadline=Date.now()+20000;
  while(true){
   let release;
   try{release=acquirePidLock(stateLock);}
-  catch(error){if(error instanceof LeaseError&&error.code==='BUSY'){await sleep(50);continue;}throw error;}
+  catch(error){if(error instanceof LeaseError&&error.code==='BUSY'&&Date.now()<deadline){await sleep(50);continue;}throw error;}
   try{return await action();}finally{release();}
  }
 }
@@ -83,10 +86,11 @@ try{
  try{await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
  catch{await exec('colima',['start','--vm-type','vz','--cpu','4','--memory','8','--disk','10'],{timeout:120000});await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
 }catch(e){await blocked('Docker unavailable: '+e.message);process.exit(1);}
-for(const {job} of allJobs().filter(({job})=>['started','cleanup_pending'].includes(job.status)&&job.remoteHost!=='macbook')){
+for(const {job} of allJobs().filter(({job})=>['preparing','ready','started','cleanup_pending'].includes(job.status)&&job.remoteHost!=='macbook')){
  try{await removeContainer('promptr-check-'+job.id);}
  catch(e){await mutateLocalJob(job.id,({job:fresh})=>{fresh.status='cleanup_pending';fresh.cleanupError=e.message;});await blocked('Container cleanup unavailable: '+e.message);process.exit(1);}
- await mutateLocalJob(job.id,({job:fresh})=>{if(!['started','cleanup_pending'].includes(fresh.status)||fresh.remoteHost==='macbook')return false;fresh.status='interrupted';fresh.finishedAt=new Date().toISOString();});
+ await mutateLocalJob(job.id,({job:fresh})=>{if(!['preparing','ready','started','cleanup_pending'].includes(fresh.status)||fresh.remoteHost==='macbook')return false;fresh.status='interrupted';fresh.finishedAt=new Date().toISOString();});
+ removeJobRelay(here,job.id);
 }
 try{
  const r=await exec('docker',['ps','-a','--format','{{.Names}}'],{timeout:10000});
@@ -101,14 +105,14 @@ try{
 
 const maxPerRun=process.env.MAX_JOBS_PER_RUN?Number(process.env.MAX_JOBS_PER_RUN):100,timeBudget=20*60000;
 if(!Number.isInteger(maxPerRun)||maxPerRun<1||maxPerRun>100)throw new Error('invalid MAX_JOBS_PER_RUN');
-let cleanupBlocked=false,ratePaused=false,limiterBlocked=false,diskPaused=false;
+let cleanupBlocked=false,ratePaused=false,limiterBlocked=false,diskPaused=false,pipelineError=null;
 function canStart(){
- if(cleanupBlocked||limiterBlocked||ratePaused||diskPaused)return false;
+ if(cleanupBlocked||limiterBlocked||ratePaused||diskPaused||fs.existsSync(path.join(here,'.vm-maintenance')))return false;
  if(readLimiterState(limiterDir).cooldownUntil>Date.now()){ratePaused=true;return false;}
  if(!diskAllowsStart(fs.statfsSync(here))){diskPaused=true;return false;}
  return true;
 }
-const due=selectJobs(stores,maxPerRun),queue=[...due],results=[];
+const due=selectJobs(stores,maxPerRun),results=[];
 console.log(`[monitor] ${new Date().toISOString()} rates=${JSON.stringify(totals)}/day pending=${pending()} batch=${due.length} local-concurrency=${GLOBAL_CHECK_CAP} active-remote=${activeRemoteLeases(stores).length} local-cap=${GLOBAL_CHECK_CAP}`);
 const started=Date.now();
 const phase=()=>cleanupBlocked||limiterBlocked||diskPaused?'blocked':ratePaused?'cooldown':'idle';
@@ -116,29 +120,77 @@ async function publish(currentPhase='running'){
  await refreshStores();
  const remote=activeRemoteLeases(stores),local=ledgerLocalActivity(stores);
  const targetResults=Object.fromEntries(stores.map(store=>{const rows=results.filter(r=>r.target===store.key);return [store.key,{dailyTotal:store.total,passed:rows.filter(j=>j.status==='passed').length,failed:rows.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:selectJobs([store],Infinity).length}];}));
- const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:totals.promptr,targetDailyTotals:totals,totalDailyChecks:totals.promptr+totals.cognispec,targetResults,slotsPerDay:288,phase:currentPhase,freeDiskGiB:Math.round(freeBytes()/1024**3*100)/100,registryLimiter:{spacingMs:SPACING_MS,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},localConcurrencyCap:GLOBAL_CHECK_CAP,activeRemoteLeases:remote.length,remoteCleanupPending:remote.filter(({job})=>job.status==='remote_cleanup_pending').length,localConcurrency:Math.max(0,GLOBAL_CHECK_CAP-remote.length),activeLocalLedgerJobs:local.length,selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:pending(),missedSlots:stores.reduce((n,s)=>n+(s.state?.missedSlots||0),0),expired:allJobs().filter(({job})=>job.status==='expired').length,interrupted:allJobs().filter(({job})=>job.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};
+ const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:totals.promptr,targetDailyTotals:totals,totalDailyChecks:totals.promptr+totals.cognispec,targetResults,slotsPerDay:288,phase:currentPhase,freeDiskGiB:Math.round(freeBytes()/1024**3*100)/100,registryLimiter:{spacingMs:SPACING_MS,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},localConcurrencyCap:GLOBAL_CHECK_CAP,activeRemoteLeases:remote.length,remoteCleanupPending:remote.filter(({job})=>job.status==='remote_cleanup_pending').length,localConcurrency:Math.max(0,GLOBAL_CHECK_CAP-remote.length),activeLocalLedgerJobs:local.length,preparedLocalJobs:allJobs().filter(({job})=>['preparing','ready'].includes(job.status)).length,pipeline:{downloaders:1,maxReady:1,testContainers:GLOBAL_CHECK_CAP},selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:pending(),missedSlots:stores.reduce((n,s)=>n+(s.state?.missedSlots||0),0),expired:allJobs().filter(({job})=>job.status==='expired').length,interrupted:allJobs().filter(({job})=>job.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};
  if(diskPaused)summary.error='Less than 5 GiB disk space remains; new checks paused';
+ if(pipelineError)summary.error=pipelineError;
  atomic(statusFile,summary);return summary;
 }
 await publish();
 
-async function reserveCandidate(candidate){
- const activeLocalContainers=await countActiveLocalContainers();
+async function reservePreparationCandidate(candidate){
  return withStateLock(()=>{
-  const fresh=loadStores(),expired=expireRemoteLeases(fresh,Date.now());
-  const reservation=reserveLocalJob(fresh,candidate.job.id,{now:Date.now(),activeLocalContainers});
-  const changed=new Set(expired.map(({store})=>store));if(reservation.started)changed.add(reservation.store);
-  for(const store of changed)persist(store);
-  stores=fresh;return reservation;
+  const fresh=loadStores(),reservation=reserveLocalPreparation(fresh,candidate.job.id,{now:Date.now()});
+  if(reservation.reserved)persist(reservation.store);stores=fresh;return reservation;
  });
+}
+async function prepareCandidate(candidate){
+ let reservation;
+ while(Date.now()-started<timeBudget&&canStart()){
+  reservation=await reservePreparationCandidate(candidate);
+  if(reservation.reserved||reservation.reason==='not_pending')break;
+  await sleep(50);
+ }
+ if(!reservation?.reserved)return null;
+ const {job,store,variant}=reservation;
+ try{
+  const artifact=await prepareFreshRelay({root:here,job,store,variant});
+  const saved=await mutateLocalJob(job.id,({job:fresh})=>{
+   if(fresh.status!=='preparing')return false;
+   const p=artifact.provenance;Object.assign(fresh,{status:'ready',expectedVersion:p.expectedVersion,artifactSha256:p.sha256,downloadBytes:p.bytes,downloadStart:p.downloadStart,downloadEnd:p.downloadEnd,relayKind:p.relayKind});
+  });
+  if(!saved){removeJobRelay(here,job.id);return null;}
+  return {...saved,variant,relayDir:artifact.relayDir};
+ }catch(error){
+  let status='failed';try{removeJobRelay(here,job.id);}catch{cleanupBlocked=true;status='cleanup_pending';}
+  const saved=await mutateLocalJob(job.id,({job:fresh})=>{if(fresh.status!=='preparing')return false;Object.assign(fresh,{status,error:String(error.message).slice(0,200),finishedAt:new Date().toISOString(),seconds:(Date.now()-Date.parse(fresh.startedAt))/1000});});
+  if(saved)results.push({...saved.job});
+  if(error.code==='REGISTRY_COOLDOWN')ratePaused=true;
+  try{const owner=JSON.parse(fs.readFileSync(path.join(limiterDir,'lock','owner.json')));if(owner.runId===job.id)limiterBlocked=true;}catch(error){if(error.code!=='ENOENT')limiterBlocked=true;}
+  await publish(phase());console.error('[monitor] Fresh preparation failed for '+job.id+': '+error.message);return null;
+ }
+}
+async function discardPrepared(reservation,error){
+ const {job}=reservation;let status='interrupted';
+ const disposable=await withStateLock(()=>loadStores().some(store=>['preparing','ready'].includes(store.state?.jobs?.[job.id]?.status)));
+ if(!disposable)return;
+ try{removeJobRelay(here,job.id);}catch{cleanupBlocked=true;status='cleanup_pending';}
+ const saved=await mutateLocalJob(job.id,({job:fresh})=>{if(!['preparing','ready'].includes(fresh.status))return false;Object.assign(fresh,{status,error:String(error.message).slice(0,200),finishedAt:new Date().toISOString()});});
+ if(saved)results.push({...saved.job});
+}
+async function executePrepared(prepared){
+ const deadline=Date.now()+120000;let reservation;
+ while(Date.now()<deadline&&!cleanupBlocked&&!diskPaused){
+  const activeLocalContainers=await countActiveLocalContainers();
+  reservation=await withStateLock(()=>{const fresh=loadStores(),r=startPreparedLocalJob(fresh,prepared.job.id,{now:Date.now(),activeLocalContainers});if(r.started)persist(r.store);stores=fresh;return r;});
+  if(reservation.started)break;
+  if(reservation.reason==='not_ready')return;
+  await sleep(100);
+ }
+ if(!reservation?.started){await discardPrepared(prepared,new Error('Container capacity unavailable'));throw new Error('Container capacity unavailable');}
+ try{await run(reservation);}catch(error){
+  let status='failed';
+  try{await removeContainer('promptr-check-'+reservation.job.id);removeJobRelay(here,reservation.job.id);}catch{cleanupBlocked=true;status='cleanup_pending';}
+  const saved=await mutateLocalJob(reservation.job.id,({job})=>{if(job.status!=='started')return false;Object.assign(job,{status,error:String(error.message).slice(0,200),finishedAt:new Date().toISOString()});});
+  if(saved)results.push({...saved.job});throw error;
+ }
 }
 async function run(reservation){
  const {job,store,variant}=reservation,out=path.join(here,'reports',job.id);fs.mkdirSync(out,{recursive:true});
  const begin=Date.now(),name='promptr-check-'+job.id;let update;
  try{
-  const r=await exec('docker',['run','--rm','--name',name,'--memory','2g','--shm-size','512m',
+  const r=await exec('docker',['run','--rm','--name',name,'--memory','2g','--shm-size','512m','--network','none',
    '-e','TARGET_EXTENSION='+store.id,'-e','REGISTRY_LIMIT_DIR=/opt/check/registry-limit','-e','TEST_VARIANT='+variant,'-e','TEST_RUN='+job.id,'-e','DAILY_PLAN_DATE='+new Date(job.slot).toISOString().slice(0,10),
-   '-v',limiterDir+':/opt/check/registry-limit','-v',path.join(here,'registry-fetch.cjs')+':/opt/check/registry-fetch.cjs:ro',
+   '-v',relayDirectory(here,job.id)+':/relay:ro','-v',path.join(here,'job-relay.cjs')+':/opt/check/registry-fetch.cjs:ro',
    '-v',path.join(here,'container-check.cjs')+':/opt/check/container-check.cjs:ro','-v',path.join(here,'install-lifecycle.cjs')+':/opt/check/install-lifecycle.cjs:ro','-v',path.join(here,'wait-for-setting.cjs')+':/opt/check/wait-for-setting.cjs:ro','-v',out+':/opt/check/results','-v',path.join(here,store.suite)+':/opt/check/extended-suite.cjs:ro',process.env.MONITOR_IMAGE||'promptr-install-check:local'],{timeout:5*60000});
   fs.writeFileSync(path.join(out,'container.log'),r.stdout+'\n--- stderr ---\n'+r.stderr);
   if(!r.stdout.includes(store.marker))throw new Error('target test success marker missing');update={status:'passed'};
@@ -149,21 +201,12 @@ async function run(reservation){
   if(fs.existsSync(path.join(limiterDir,'lock'))){try{if(JSON.parse(fs.readFileSync(path.join(limiterDir,'lock','owner.json'))).runId===job.id)limiterBlocked=true;}catch{limiterBlocked=true;}}
   if((e.stdout||'').includes('PROMPTR_REGISTRY_COOLDOWN')||(e.stderr||'').includes('PROMPTR_REGISTRY_COOLDOWN'))ratePaused=true;
  }
- update.seconds=Math.round((Date.now()-begin)/100)/10;update.finishedAt=new Date().toISOString();
+ if(update.status!=='cleanup_pending'){try{removeJobRelay(here,job.id);}catch(error){cleanupBlocked=true;update.status='cleanup_pending';update.cleanupError='Job artifact cleanup: '+error.message;}}
+ update.testSeconds=Math.round((Date.now()-begin)/100)/10;update.seconds=Math.round((Date.now()-Date.parse(job.startedAt))/100)/10;update.finishedAt=new Date().toISOString();
  const saved=await mutateLocalJob(job.id,({job:fresh})=>{if(fresh.status!=='started'||fresh.remoteHost==='macbook')return false;Object.assign(fresh,update);});
  if(saved){const result={...saved.job};results.push(result);await publish(phase()==='idle'?'running':phase());console.log(`[monitor] ${job.id} ${store.key}/${variant}: ${result.status} in ${result.seconds}s`);}
 }
-async function worker(){
- while(queue.length&&Date.now()-started<timeBudget&&canStart()){
-  const candidate=queue.shift();let reservation;
-  while(Date.now()-started<timeBudget&&canStart()){
-   reservation=await reserveCandidate(candidate);
-   if(reservation.started||reservation.reason==='not_pending')break;
-   await sleep(250);
-  }
-  if(reservation?.started)await run(reservation);
- }
-}
-await Promise.all(Array.from({length:GLOBAL_CHECK_CAP},worker));
+try{await runCheckPipeline({items:due,prepare:prepareCandidate,execute:executePrepared,discard:discardPrepared,canPrepare:()=>Date.now()-started<timeBudget&&canStart(),canExecute:()=>!cleanupBlocked&&!diskPaused,concurrency:GLOBAL_CHECK_CAP,maxReady:1});}
+catch(error){cleanupBlocked=true;pipelineError=error.message;console.error('[monitor] Pipeline stopped safely: '+error.message);}
 const summary=await publish(phase());fs.appendFileSync(path.join(here,'history.jsonl'),JSON.stringify(summary)+'\n');console.log('[monitor] '+JSON.stringify(summary));
 process.exitCode=summary.failed||cleanupBlocked||limiterBlocked||diskPaused?1:0;

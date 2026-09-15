@@ -35,7 +35,7 @@ function runChecked(command, args, options = {}) {
   const timings = {schemaVersion: 1, runId: process.env.TEST_RUN, targetId, variant, status: 'failed', stagesMs: {}, cli: []};
   const finishStage = name => { const now = performance.now(); timings.stagesMs[name] = Math.round(now - stageStarted); stageStarted = now; };
   try {
-  // Fresh download from the registry, inside this brand-new container.
+  // Fresh registry retrieval, either direct or from this job's single-use host relay.
   assert(!fs.existsSync(vsix), 'VSIX must not be present before this fresh download');
   const registryUrl = 'https://open-vsx.org/api/aryansudhir/' + targetName;
   const registryFetch = createRegistryFetch({stateDir: process.env.REGISTRY_LIMIT_DIR, reportDir: resultDir, runId: process.env.TEST_RUN});
@@ -58,7 +58,10 @@ function runChecked(command, args, options = {}) {
   const artifact = {
     targetId,
     source: registry.files.download,
-    downloadStart, downloadEnd,
+    downloadStart: registryFetch.provenance?.downloadStart ?? downloadStart,
+    downloadEnd: registryFetch.provenance?.downloadEnd ?? downloadEnd,
+    downloadEnvironment: registryFetch.provenance?.downloadEnvironment ?? 'imac-colima-container',
+    registryTransport: registryFetch.provenance?.relayKind ?? 'direct',
     environment: 'imac-colima-container',
     container: process.env.HOSTNAME,
     plannedDate: process.env.DAILY_PLAN_DATE,

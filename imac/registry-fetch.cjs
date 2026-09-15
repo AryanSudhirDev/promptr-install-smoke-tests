@@ -3,6 +3,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {setTimeout: sleep} = require('node:timers/promises');
 const SPACING_MS = 650; // Always leave >500ms after completion, not just after dispatch.
+const SERVICE_ORDER=Object.freeze(['imac','imac','imac','macbook']);
+function chooseRegistryTicket(waiting,turn=0){
+ if(!Number.isInteger(turn)||turn<0||turn>=SERVICE_ORDER.length)throw new Error('Invalid registry service turn');
+ for(let offset=0;offset<SERVICE_ORDER.length;offset++){const index=(turn+offset)%SERVICE_ORDER.length,ticket=waiting.find(x=>x.clientClass===SERVICE_ORDER[index]);if(ticket)return {...ticket,turn:index};}
+ return null;
+}
 const HOSTS = new Set(['open-vsx.org', 'openvsx.eclipsecontent.org']);
 class CooldownError extends Error { constructor(until) { super(`PROMPTR_REGISTRY_COOLDOWN until=${new Date(until).toISOString()}`); this.code='REGISTRY_COOLDOWN'; this.until=until; } }
 function validateUrl(input) {
@@ -12,7 +18,7 @@ function validateUrl(input) {
 }
 function readState(dir) {
   const s=JSON.parse(fs.readFileSync(path.join(dir,'state.json'),'utf8'));
-  if(s.version!==1||![s.nextAllowedAt,s.cooldownUntil].every(n=>Number.isFinite(n)&&n>=0))throw new Error('Invalid registry limiter state; refusing requests');
+  if(s.version!==1||![s.nextAllowedAt,s.cooldownUntil].every(n=>Number.isFinite(n)&&n>=0)||(s.priorityTurn!==undefined&&(!Number.isInteger(s.priorityTurn)||s.priorityTurn<0||s.priorityTurn>=SERVICE_ORDER.length)))throw new Error('Invalid registry limiter state; refusing requests');
   return s;
 }
 function writeState(dir,s) {
@@ -27,51 +33,61 @@ function retryDelay(value,attempt,now=Date.now(),random=Math.random) {
   // Positive-only jitter never shortens Retry-After. Do not cap a server's long delay.
   return Math.max(SPACING_MS,delay)+250+Math.floor(random()*250);
 }
-async function acquire(dir,deadline,runId) {
+async function acquire(dir,deadline,runId,clientClass) {
   const lock=path.join(dir,'lock'),queue=path.join(dir,'queue'),token=crypto.randomUUID();
   fs.mkdirSync(queue,{recursive:true});
-  // FIFO per request, including redirects/retries. A fast client must rejoin
-  // behind existing waiters rather than monopolizing this shared registry lock.
-  const ticket=String(Date.now()).padStart(16,'0')+'-'+token+'.json',ticketPath=path.join(queue,ticket);
-  const temporary=ticketPath+'.tmp';
-  fs.writeFileSync(temporary,JSON.stringify({deadline}),{flag:'wx',mode:0o644});
-  fs.renameSync(temporary,ticketPath);
+  const ticket=String(Date.now()).padStart(16,'0')+'-'+token+'.json',ticketPath=path.join(queue,ticket),temporary=ticketPath+'.tmp';
+  fs.writeFileSync(temporary,JSON.stringify({deadline,clientClass}),{flag:'wx',mode:0o644});fs.renameSync(temporary,ticketPath);
+  const readWaiting=()=>{
+    const waiting=[];
+    for(const name of fs.readdirSync(queue).sort()){
+      if(name.endsWith('.tmp'))continue;
+      if(!/^\d{16}-[a-f0-9-]+\.json$/.test(name))throw new Error('Invalid registry queue ticket; failing closed');
+      const file=path.join(queue,name);let value;
+      try{value=JSON.parse(fs.readFileSync(file,'utf8'));}catch(error){if(error.code==='ENOENT')continue;throw error;}
+      if(!Number.isFinite(value.deadline)||!['imac','macbook'].includes(value.clientClass??'imac'))throw new Error('Invalid registry queue data; failing closed');
+      if(value.deadline<=Date.now()){try{fs.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}continue;}
+      waiting.push({name,clientClass:value.clientClass??'imac'});
+    }
+    return waiting;
+  };
   try {
     while(Date.now()<deadline){
-      const waiting=[];
-      for(const name of fs.readdirSync(queue).sort()){
-        if(name.endsWith('.tmp'))continue;
-        if(!/^\d{16}-[a-f0-9-]+\.json$/.test(name))throw new Error('Invalid registry queue ticket; failing closed');
-        const file=path.join(queue,name);let value;
-        try{value=JSON.parse(fs.readFileSync(file,'utf8'));}catch(error){if(error.code==='ENOENT')continue;throw error;}
-        if(!Number.isFinite(value.deadline))throw new Error('Invalid registry queue deadline; failing closed');
-        if(value.deadline<=Date.now()){try{fs.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}continue;}
-        waiting.push(name);
-      }
-      if(waiting[0]!==ticket){await sleep(Math.min(50,Math.max(1,deadline-Date.now())));continue;}
-      try{fs.mkdirSync(lock);}
-      catch(error){if(error.code!=='EEXIST')throw error;await sleep(Math.min(50,Math.max(1,deadline-Date.now())));continue;}
+      const state=readState(dir),ready=Math.max(state.nextAllowedAt,state.cooldownUntil);
+      if(state.cooldownUntil>=deadline)throw new CooldownError(state.cooldownUntil);
+      // Don't hand out ownership during the pacing gap. The iMac producer must
+      // be able to queue its next HTTP step before priority is decided.
+      if(Date.now()<ready){await sleep(Math.min(50,Math.max(1,deadline-Date.now())));continue;}
+      if(chooseRegistryTicket(readWaiting(),state.priorityTurn??0)?.name!==ticket){await sleep(25);continue;}
+      try{fs.mkdirSync(lock);}catch(error){if(error.code!=='EEXIST')throw error;await sleep(25);continue;}
       const owner=path.join(lock,'owner.json');
       try{fs.writeFileSync(owner,JSON.stringify({runId,pid:process.pid,at:Date.now(),token}),{flag:'wx'});}
       catch(error){throw new Error('Registry lock ownership could not be established; failing closed',{cause:error});}
-      return ()=>{
-        // Do not recursively delete a replacement owner's lock after an external reset.
+      const release=()=>{
         const current=JSON.parse(fs.readFileSync(owner,'utf8'));
         if(current.token!==token)throw new Error('Registry lock ownership changed; refusing to release another request');
         fs.unlinkSync(owner);fs.rmdirSync(lock);
       };
+      let selected,valid=false;
+      try{
+        const current=readState(dir);selected=chooseRegistryTicket(readWaiting(),current.priorityTurn??0);
+        valid=selected?.name===ticket&&Math.max(current.nextAllowedAt,current.cooldownUntil)<=Date.now();
+      }catch(error){release();throw error;}
+      if(!valid){release();await sleep(25);continue;}
+      return {release,turn:selected.turn};
     }
     throw new Error('Registry limiter lock deadline exceeded; failing closed');
-  } finally {try{fs.unlinkSync(ticketPath);}catch(error){if(error.code!=='ENOENT')throw error;}}
+  }finally{try{fs.unlinkSync(ticketPath);}catch(error){if(error.code!=='ENOENT')throw error;}}
 }
-function createRegistryFetch({stateDir,reportDir,runId='unknown',fetchImpl=fetch,totalTimeoutMs=120000,requestTimeoutMs=30000,maxAttempts=3,overallDeadline=Infinity}={}) {
+function createRegistryFetch({stateDir,reportDir,runId='unknown',fetchImpl=fetch,totalTimeoutMs=120000,requestTimeoutMs=30000,maxAttempts=3,overallDeadline=Infinity,clientClass='imac'}={}) {
   if(!stateDir)throw new Error('Shared registry limiter directory is required');
+  if(!['imac','macbook'].includes(clientClass))throw new Error('Invalid registry client class');
   if(!Number.isInteger(maxAttempts)||maxAttempts<1||maxAttempts>3)throw new Error('Invalid retry limit');
   return async function registryFetch(input) {
     let url=validateUrl(input),redirects=0,attempt=0;
     const deadline=Math.min(Date.now()+totalTimeoutMs,overallDeadline);
     while(true){
-      const release=await acquire(stateDir,deadline,runId);
+      const {release,turn}=await acquire(stateDir,deadline,runId,clientClass);
       let response,body,retry=false;
       try{
         const s=readState(stateDir),ready=Math.max(s.nextAllowedAt,s.cooldownUntil);
@@ -88,12 +104,13 @@ function createRegistryFetch({stateDir,reportDir,runId='unknown',fetchImpl=fetch
         }catch(e){requestError=e;}
         const finishedAt=Date.now();
         s.nextAllowedAt=finishedAt+SPACING_MS;
+        s.priorityTurn=(turn+1)%SERVICE_ORDER.length;
         if(response&&[429,503].includes(response.status)){
           s.cooldownUntil=Math.max(s.cooldownUntil,finishedAt+retryDelay(response.headers.get('retry-after'),attempt,finishedAt));
           retry=attempt+1<maxAttempts;
         }
         writeState(stateDir,s); // Persist before releasing lock, including errors and cooldowns.
-        if(reportDir)fs.appendFileSync(path.join(reportDir,'registry-requests.jsonl'),JSON.stringify({runId,url,startedAt,finishedAt,status:response?.status??null,error:requestError?.message,attempt:attempt+1,cooldownUntil:s.cooldownUntil})+'\n');
+        if(reportDir)fs.appendFileSync(path.join(reportDir,'registry-requests.jsonl'),JSON.stringify({runId,clientClass,url,startedAt,finishedAt,status:response?.status??null,error:requestError?.message,attempt:attempt+1,cooldownUntil:s.cooldownUntil})+'\n');
         if(requestError)throw requestError;
         if(response&&[429,503].includes(response.status)&&s.cooldownUntil>=deadline)throw new CooldownError(s.cooldownUntil);
       }finally{release();}
@@ -118,4 +135,4 @@ function initializeLimiter(dir,{containersAbsent=false}={}) {
   s.nextAllowedAt=Math.max(s.nextAllowedAt,Date.now()+SPACING_MS);writeState(dir,s);
   return s;
 }
-module.exports={createRegistryFetch,initializeLimiter,readState,retryDelay,CooldownError,SPACING_MS};
+module.exports={chooseRegistryTicket,createRegistryFetch,initializeLimiter,readState,retryDelay,CooldownError,SPACING_MS};

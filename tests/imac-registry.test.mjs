@@ -91,3 +91,21 @@ test('relay overall deadline bounds the whole multi-request sequence',async t=>{
  const f=createRegistryFetch({stateDir:dir,overallDeadline:Date.now()+900,totalTimeoutMs:30000,fetchImpl:async()=>{calls++;return new Response('fixture');}});
  await f(url);await assert.rejects(f(url),/deadline/);assert.equal(calls,1);
 });
+
+test('iMac priority is three turns to one while unused capacity remains available to either runner',()=>{
+ const {chooseRegistryTicket}=require(helper);
+ const waiting=[{name:'m1',clientClass:'macbook'},{name:'i1',clientClass:'imac'},{name:'m2',clientClass:'macbook'},{name:'i2',clientClass:'imac'}];
+ assert.deepEqual([0,1,2,3].map(turn=>chooseRegistryTicket(waiting,turn).clientClass),['imac','imac','imac','macbook']);
+ assert.equal(chooseRegistryTicket(waiting.filter(x=>x.clientClass==='macbook'),0).name,'m1');
+ assert.equal(chooseRegistryTicket(waiting.filter(x=>x.clientClass==='imac'),3).name,'i1');
+ assert.equal(chooseRegistryTicket([],0),null);
+});
+test('weighted callers preserve spacing and complete without starvation',async t=>{
+ const dir=fixture(t),order=[];
+ const make=clientClass=>createRegistryFetch({stateDir:dir,clientClass,reportDir:dir,fetchImpl:async()=>{order.push(clientClass);return new Response('offline');}});
+ const imac=make('imac'),macbook=make('macbook');
+ await Promise.all([(async()=>{for(let i=0;i<6;i++)await imac(url);})(),(async()=>{for(let i=0;i<2;i++)await macbook(url);})()]);
+ assert.deepEqual(order,['imac','imac','imac','macbook','imac','imac','imac','macbook']);
+ const rows=fs.readFileSync(path.join(dir,'registry-requests.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+ for(let i=1;i<rows.length;i++)assert.ok(rows[i].startedAt-rows[i-1].finishedAt>=650);
+});

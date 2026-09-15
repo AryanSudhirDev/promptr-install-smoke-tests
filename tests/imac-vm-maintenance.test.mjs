@@ -21,5 +21,5 @@ test('iMac restart retains eight GiB and all four cores without raising concurre
  const text=fs.readFileSync(new URL('../imac/monitor.mjs',import.meta.url),'utf8');
  assert.match(text,/'--cpu','4','--memory','8','--disk','10'/);
  assert.ok(text.indexOf("'.vm-maintenance'")<text.indexOf('acquirePidLock(processLock)'));
- assert.match(text,/Array\.from\(\{length:GLOBAL_CHECK_CAP\}/);
+ assert.match(text,/concurrency:GLOBAL_CHECK_CAP,maxReady:1/);
 });

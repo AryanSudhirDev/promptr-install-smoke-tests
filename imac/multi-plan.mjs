@@ -21,7 +21,7 @@ export function advanceTarget(state,now,key,total,idPrefix=''){
  state={...allocation,jobs:previous};
  for(const [id,job] of Object.entries(state.jobs)){
   if(job.status==='pending'&&job.slot<now-LOOKBACK_MS)job.status='expired';
-  if(job.slot<now-7*86400000&&!['started','cleanup_pending'].includes(job.status))delete state.jobs[id];
+  if(job.slot<now-7*86400000&&!['preparing','ready','started','cleanup_pending'].includes(job.status))delete state.jobs[id];
  }
  return state;
 }
