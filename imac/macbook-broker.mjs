@@ -97,7 +97,7 @@ export async function retrieveFreshRegistry(reservation,{root=here,limiterRoot=r
  const reportDir=claimReportDir(root,job.id);
  const limiterDir=path.join(limiterRoot,'registry-limit');
  readLimiterState(limiterDir); // Never create/reset the shared limiter in the broker.
- const fetchRegistry=registryFetchFactory({stateDir:limiterDir,reportDir,runId:job.id,totalTimeoutMs:30000,requestTimeoutMs:20000,maxAttempts:1});
+ const fetchRegistry=registryFetchFactory({stateDir:limiterDir,reportDir,runId:job.id,totalTimeoutMs:100000,overallDeadline:Date.now()+100000,requestTimeoutMs:20000,maxAttempts:1});
  const targetName=store.id.split('.')[1],metadataUrl=`https://open-vsx.org/api/aryansudhir/${targetName}`;
  const metadataBytes=await responseBuffer(await fetchOk(fetchRegistry,metadataUrl),1024*1024,'Registry metadata');
  let metadata;try{metadata=JSON.parse(metadataBytes.toString('utf8'));}catch{throw new LeaseError('INVALID_METADATA','Registry metadata is not valid JSON');}

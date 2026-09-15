@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const {setTimeout: sleep} = require('node:timers/promises');
 const SPACING_MS = 650; // Always leave >500ms after completion, not just after dispatch.
 const HOSTS = new Set(['open-vsx.org', 'openvsx.eclipsecontent.org']);
@@ -27,22 +28,48 @@ function retryDelay(value,attempt,now=Date.now(),random=Math.random) {
   return Math.max(SPACING_MS,delay)+250+Math.floor(random()*250);
 }
 async function acquire(dir,deadline,runId) {
-  const lock=path.join(dir,'lock');
-  while(Date.now()<deadline){
-    try{fs.mkdirSync(lock);}
-    catch(e){if(e.code!=='EEXIST')throw e;await sleep(Math.min(100,Math.max(1,deadline-Date.now())));continue;}
-    try{fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({runId,pid:process.pid,at:Date.now()}));}
-    catch(e){fs.rmSync(lock,{recursive:true,force:true});throw e;}
-    return ()=>fs.rmSync(lock,{recursive:true,force:true});
-  }
-  throw new Error('Registry limiter lock deadline exceeded; failing closed');
+  const lock=path.join(dir,'lock'),queue=path.join(dir,'queue'),token=crypto.randomUUID();
+  fs.mkdirSync(queue,{recursive:true});
+  // FIFO per request, including redirects/retries. A fast client must rejoin
+  // behind existing waiters rather than monopolizing this shared registry lock.
+  const ticket=String(Date.now()).padStart(16,'0')+'-'+token+'.json',ticketPath=path.join(queue,ticket);
+  const temporary=ticketPath+'.tmp';
+  fs.writeFileSync(temporary,JSON.stringify({deadline}),{flag:'wx',mode:0o644});
+  fs.renameSync(temporary,ticketPath);
+  try {
+    while(Date.now()<deadline){
+      const waiting=[];
+      for(const name of fs.readdirSync(queue).sort()){
+        if(name.endsWith('.tmp'))continue;
+        if(!/^\d{16}-[a-f0-9-]+\.json$/.test(name))throw new Error('Invalid registry queue ticket; failing closed');
+        const file=path.join(queue,name);let value;
+        try{value=JSON.parse(fs.readFileSync(file,'utf8'));}catch(error){if(error.code==='ENOENT')continue;throw error;}
+        if(!Number.isFinite(value.deadline))throw new Error('Invalid registry queue deadline; failing closed');
+        if(value.deadline<=Date.now()){try{fs.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}continue;}
+        waiting.push(name);
+      }
+      if(waiting[0]!==ticket){await sleep(Math.min(50,Math.max(1,deadline-Date.now())));continue;}
+      try{fs.mkdirSync(lock);}
+      catch(error){if(error.code!=='EEXIST')throw error;await sleep(Math.min(50,Math.max(1,deadline-Date.now())));continue;}
+      const owner=path.join(lock,'owner.json');
+      try{fs.writeFileSync(owner,JSON.stringify({runId,pid:process.pid,at:Date.now(),token}),{flag:'wx'});}
+      catch(error){throw new Error('Registry lock ownership could not be established; failing closed',{cause:error});}
+      return ()=>{
+        // Do not recursively delete a replacement owner's lock after an external reset.
+        const current=JSON.parse(fs.readFileSync(owner,'utf8'));
+        if(current.token!==token)throw new Error('Registry lock ownership changed; refusing to release another request');
+        fs.unlinkSync(owner);fs.rmdirSync(lock);
+      };
+    }
+    throw new Error('Registry limiter lock deadline exceeded; failing closed');
+  } finally {try{fs.unlinkSync(ticketPath);}catch(error){if(error.code!=='ENOENT')throw error;}}
 }
-function createRegistryFetch({stateDir,reportDir,runId='unknown',fetchImpl=fetch,totalTimeoutMs=120000,requestTimeoutMs=30000,maxAttempts=3}={}) {
+function createRegistryFetch({stateDir,reportDir,runId='unknown',fetchImpl=fetch,totalTimeoutMs=120000,requestTimeoutMs=30000,maxAttempts=3,overallDeadline=Infinity}={}) {
   if(!stateDir)throw new Error('Shared registry limiter directory is required');
   if(!Number.isInteger(maxAttempts)||maxAttempts<1||maxAttempts>3)throw new Error('Invalid retry limit');
   return async function registryFetch(input) {
     let url=validateUrl(input),redirects=0,attempt=0;
-    const deadline=Date.now()+totalTimeoutMs;
+    const deadline=Math.min(Date.now()+totalTimeoutMs,overallDeadline);
     while(true){
       const release=await acquire(stateDir,deadline,runId);
       let response,body,retry=false;

@@ -57,7 +57,7 @@ test('network/body failures release the mutex but preserve spacing',async t=>{
 });
 test('host integration verifies cleanup and routes all harness requests through the limiter',()=>{
  const monitor=fs.readFileSync(new URL('../imac/monitor.mjs',import.meta.url),'utf8');
- assert.ok(monitor.indexOf("['ps','-a','--format'")<monitor.indexOf('initializeLimiter(limiterDir'));
+ assert.ok(monitor.indexOf("['ps','-a','--format'")<monitor.indexOf('await prepareSharedLimiter('));
  assert.match(monitor,/REGISTRY_LIMIT_DIR=\/opt\/check\/registry-limit/);
  for(const f of ['registry-fetch.cjs','container-check.cjs'])assert.ok(monitor.includes(`:/opt/check/${f}:ro`));
  assert.match(monitor,/cooldownUntil>Date\.now\(\)/);
@@ -71,4 +71,23 @@ test('a stalled response body stays inside the request timeout',async t=>{
  const f=createRegistryFetch({stateDir:dir,requestTimeoutMs:100,fetchImpl:(_u,options)=>fetch(`http://127.0.0.1:${server.address().port}`,options)});
  await assert.rejects(f(url),e=>/abort|timeout/i.test(e.name+' '+e.message));
  assert.equal(fs.existsSync(path.join(dir,'lock')),false);assert.ok(readState(dir).nextAllowedAt>Date.now());
+});
+
+test('fair queue serves waiting clients before a client reacquires',async t=>{
+ const dir=fixture(t),order=[];
+ const runs=Array.from({length:6},(_,i)=>{const f=createRegistryFetch({stateDir:dir,runId:String(i),fetchImpl:async()=>{order.push(i);return new Response('offline fixture');}});return (async()=>{await f(url);await f(url);})();});
+ await Promise.all(runs);assert.equal(order.length,12);assert.equal(new Set(order.slice(0,6)).size,6);
+ assert.equal(fs.readdirSync(path.join(dir,'queue')).length,0);
+});
+test('an owner cannot remove a replacement registry lock',async t=>{
+ const dir=fixture(t);const f=createRegistryFetch({stateDir:dir,fetchImpl:async()=>{
+  fs.writeFileSync(path.join(dir,'lock','owner.json'),JSON.stringify({token:'replacement',runId:'other'}));return new Response('fixture');
+ }});
+ await assert.rejects(f(url),/ownership changed/);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(dir,'lock','owner.json'))).token,'replacement');
+});
+test('relay overall deadline bounds the whole multi-request sequence',async t=>{
+ const dir=fixture(t);let calls=0;
+ const f=createRegistryFetch({stateDir:dir,overallDeadline:Date.now()+900,totalTimeoutMs:30000,fetchImpl:async()=>{calls++;return new Response('fixture');}});
+ await f(url);await assert.rejects(f(url),/deadline/);assert.equal(calls,1);
 });

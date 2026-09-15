@@ -10,7 +10,8 @@ import {
  expireRemoteLeases,ledgerLocalActivity,reserveLocalJob,
 } from './macbook-lease.mjs';
 import registryLimiter from './registry-fetch.cjs';
-const {initializeLimiter,readState:readLimiterState,SPACING_MS}=registryLimiter;
+import {prepareSharedLimiter} from './limiter-preflight.mjs';
+const {readState:readLimiterState,SPACING_MS}=registryLimiter;
 const here=path.dirname(fileURLToPath(import.meta.url));
 const limiterDir=path.join(here,'registry-limit'),stateLock=path.join(here,'.monitor-v2.lock'),processLock=path.join(here,'.monitor-process.lock');
 const statusFile=path.join(here,'status-v2.json');
@@ -89,10 +90,9 @@ for(const {job} of allJobs().filter(({job})=>['started','cleanup_pending'].inclu
 try{
  const r=await exec('docker',['ps','-a','--format','{{.Names}}'],{timeout:10000});
  if(r.stdout.split(/\r?\n/).some(name=>name.startsWith('promptr-check-')))throw new Error('Prior local QA container still exists');
- await withStateLock(()=>{
+ await withStateLock(async()=>{
   const fresh=loadStores();
-  if(activeRemoteLeases(fresh).length===0)initializeLimiter(limiterDir,{containersAbsent:true});
-  else readLimiterState(limiterDir); // Never recover/reset a limiter a remote fenced job may be using.
+  await prepareSharedLimiter({limiterDir,macbookPlanRoot:path.join(here,'macbook-plan'),localStores:fresh});
   stores=fresh;
  });
  if(!diskAllowsStart(fs.statfsSync(here)))throw new Error('Less than 5 GiB disk space remains; new checks paused');
