@@ -7,6 +7,11 @@ import {ensureImage} from './image.mjs';
 import {fileURLToPath} from 'node:url';
 import {acquireLocalLock} from './pid-lock.mjs';
 const abort=new AbortController();let activeName=null,lastSettings=null,cleanupVerified=false;
+// Losing the race for a shared slot is ordinary contention, not a failure. The iMac's own plan holds
+// the three-check cap for part of every slot, so a claim can be refused right after a peek said yes.
+// Exiting here would idle this MacBook until the supervisor's next poll, minutes later.
+const CONTENDED=new Set(['BUSY','LOCAL_ACTIVE','REMOTE_ACTIVE','GLOBAL_CAP']);
+const retryDelay=ms=>Number.isFinite(ms)?Math.min(15000,Math.max(2000,ms)):5000;
 const lock=path.join(ROOT,'worker.pid');
 const releaseLock=await acquireLocalLock(lock,fileURLToPath(import.meta.url));if(!releaseLock)process.exit(0);
 process.on('SIGTERM',()=>abort.abort());process.on('SIGINT',()=>abort.abort());
@@ -65,7 +70,7 @@ try{
   const plan={promptrDailyTotal:lastSettings.promptrDailyTotal,cognispecDailyTotal:lastSettings.cognispecDailyTotal};
   if(plan.promptrDailyTotal===0&&plan.cognispecDailyTotal===0){workerStatus({phase:'paused_plan',detail:'Both independently planned MacBook targets are set to 0/day.'});await sleep(15000,null,{signal:abort.signal});continue;}
   const peek=await broker('macbook-peek',{plan},lastSettings,{signal:abort.signal,timeout:15000});if(!peek.available){await sleep(15000,null,{signal:abort.signal});continue;}
-  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},lastSettings,{signal:abort.signal,timeout:120000});}catch(e){if(['BUSY','LOCAL_ACTIVE','REMOTE_ACTIVE'].includes(e.code)){await sleep(5000,null,{signal:abort.signal});continue;}throw e;}
+  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},lastSettings,{signal:abort.signal,timeout:120000});}catch(e){if(CONTENDED.has(e.code)){workerStatus({phase:'waiting_for_work',detail:'Shared fleet busy ('+e.message+'); retrying.'});await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;}throw e;}
   if(!bundle.claimed){await sleep(15000,null,{signal:abort.signal});continue;}
   await check(bundle,image,start);
  }
