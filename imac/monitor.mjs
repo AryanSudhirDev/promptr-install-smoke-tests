@@ -15,6 +15,7 @@ const {readState:readLimiterState,SPACING_MS}=registryLimiter;
 const here=path.dirname(fileURLToPath(import.meta.url));
 const limiterDir=path.join(here,'registry-limit'),stateLock=path.join(here,'.monitor-v2.lock'),processLock=path.join(here,'.monitor-process.lock');
 const statusFile=path.join(here,'status-v2.json');
+if(fs.existsSync(path.join(here,'.vm-maintenance'))){console.log('[monitor] VM maintenance; leaving planned checks queued');process.exit(0);}
 const atomic=(file,data)=>{const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data,null,2)+'\n');fs.renameSync(tmp,file);};
 let releaseProcess;
 try{releaseProcess=acquirePidLock(processLock);}
@@ -80,7 +81,7 @@ async function mutateLocalJob(jobId,mutate){
 
 try{
  try{await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
- catch{await exec('colima',['start','--vm-type','vz','--cpu','4','--memory','6','--disk','10'],{timeout:120000});await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
+ catch{await exec('colima',['start','--vm-type','vz','--cpu','4','--memory','8','--disk','10'],{timeout:120000});await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
 }catch(e){await blocked('Docker unavailable: '+e.message);process.exit(1);}
 for(const {job} of allJobs().filter(({job})=>['started','cleanup_pending'].includes(job.status)&&job.remoteHost!=='macbook')){
  try{await removeContainer('promptr-check-'+job.id);}

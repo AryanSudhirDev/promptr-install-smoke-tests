@@ -240,6 +240,9 @@ function errorResponse(operation,error){
 }
 export async function dispatch(argv=process.argv.slice(2),options={}){
  const operation=argv[0];if(argv.length!==1||!['peek','claim','recover','complete','macbook-peek','macbook-claim','macbook-recover','macbook-complete'].includes(operation))throw new LeaseError('INVALID_OPERATION','Usage: macbook-broker.mjs peek|claim|recover|complete|macbook-peek|macbook-claim|macbook-recover|macbook-complete');
+ // Drain existing downloads/tests during VM maintenance; never block their
+ // completion or recovery, and never reserve/download new work while paused.
+ if(['peek','claim','macbook-peek','macbook-claim'].includes(operation)&&fs.existsSync(path.join(options.limiterRoot??options.root??here,'.vm-maintenance')))return {ok:true,operation,busy:true,available:false,claimed:false,retryAfterMs:2000};
  if(operation==='peek')return peekOperation(options);
  if(operation==='claim')return claimOperation(options);
  if(operation==='recover')return recoverOperation(options);
