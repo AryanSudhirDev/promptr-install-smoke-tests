@@ -3,8 +3,12 @@ import { timingSafeEqual } from 'node:crypto';
 const REPO = process.env.QA_REPO || 'AryanSudhirDev/promptr-install-smoke-tests';
 const ORIGINS = new Set(['https://aryansudhirdev.github.io', 'https://promptr-qa-dashboard.vercel.app',
   'http://localhost:4321', 'http://localhost:4322', 'http://localhost:4323']);
-const validTotal = (n, target = 'imac') => typeof n === 'number' && Number.isInteger(n) && n >= (target === 'cognispec' ? 0 : 1) && n <= (target === 'github' ? 1000 : 8000);
-const rangeFor = target => target === 'github' ? '1 to 1000' : target === 'cognispec' ? '0 to 8000' : '1 to 8000';
+// iMac targets are not capped at an achievable rate on purpose: MAX_IMAC only guards the job ledger
+// against a mistyped total, and must stay equal to MAX_TOTAL in imac/schedule.mjs or the iMac would
+// silently ignore a saved value. GitHub keeps a real 1000 ceiling; each of its checks is a hosted VM.
+const MAX_IMAC = 50000, MAX_GITHUB = 1000;
+const validTotal = (n, target = 'imac') => typeof n === 'number' && Number.isInteger(n) && n >= (target === 'cognispec' ? 0 : 1) && n <= (target === 'github' ? MAX_GITHUB : MAX_IMAC);
+const rangeFor = target => target === 'github' ? `1 to ${MAX_GITHUB}` : `${target === 'cognispec' ? 0 : 1} to ${MAX_IMAC}`;
 async function gh(path, init = {}) {
   const response = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
     ...init, signal: AbortSignal.timeout(10000), headers: {

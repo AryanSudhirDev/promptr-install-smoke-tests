@@ -18,8 +18,8 @@ test('reject unauthenticated, foreign origin and unsupported methods', async () 
   assert.equal(pre.code,204); assert.equal(pre.headers['Access-Control-Allow-Origin'],'https://aryansudhirdev.github.io');
 });
 test('strict validation rejects coercions and malformed JSON', async () => {
-  for (const total of [0,8001,1.4,true,'200',null]) assert.equal((await invoke('POST',{target:'imac',total})).code,400);
-  for (const total of [-1,8001,1.4,true,'200',null]) assert.equal((await invoke('POST',{target:'cognispec',total})).code,400);
+  for (const total of [0,50001,1.4,true,'200',null]) assert.equal((await invoke('POST',{target:'imac',total})).code,400);
+  for (const total of [-1,50001,1.4,true,'200',null]) assert.equal((await invoke('POST',{target:'cognispec',total})).code,400);
   assert.equal((await invoke('POST','{')).code,400);
   assert.equal((await invoke('POST',{target:'other',total:200})).code,400);
 });
@@ -47,11 +47,12 @@ test('GitHub errors never expose raw response or credentials', async () => {
   assert.ok(!JSON.stringify(r.body).includes('sensitive'));
 });
 
-test('iMac supports 8000 but GitHub retains its 1000 ceiling',async()=>{
+test('iMac totals are unclamped up to the ledger guard while GitHub retains its 1000 ceiling',async()=>{
   globalThis.fetch=async(url,init)=>new Response(JSON.stringify({sha:'test',content:Buffer.from(JSON.stringify({imacDailyTotal:8000})).toString('base64')}));
-  assert.equal((await invoke('POST',{target:'imac',total:8000})).code,200);
+  for(const total of [8000,20000,50000]) assert.equal((await invoke('POST',{target:'imac',total})).code,200);
+  assert.equal((await invoke('POST',{target:'cognispec',total:20000})).code,200);
   assert.equal((await invoke('POST',{target:'github',total:1001})).code,400);
-  assert.equal((await invoke('POST',{target:'imac',total:8001})).code,400);
+  assert.equal((await invoke('POST',{target:'imac',total:50001})).code,400);
   assert.equal((await invoke('POST',{target:'cognispec',total:0})).code,200);
 });
 test('editing Promptr rate preserves the independent CogniSpec target',async()=>{

@@ -25,6 +25,9 @@ function writeNewJson(file,data){
  try{fs.linkSync(temp,file);fs.unlinkSync(temp);}catch(error){try{fs.unlinkSync(temp);}catch{}throw error;}
 }
 function optionalTotal(value){return value===0||validTotal(value);}
+// Last line of enforcement for a MacBook plan. A typo guard, not the approved volume: keep equal to
+// MAX_TARGET in api/macbook.js and macbook/policy.mjs, and deploy this file before either of them.
+const MACBOOK_MAX_TARGET=50000;
 async function acquireStateLock(lockPath,{isAlive,timeoutMs=5000}={}){
  const deadline=Date.now()+timeoutMs;
  while(true){
@@ -43,7 +46,7 @@ export function readTotals(root=here){
 export function validateMacBookPlan(plan){
  if(!plan||typeof plan!=='object'||Array.isArray(plan)||Object.keys(plan).some(k=>!['promptrDailyTotal','cognispecDailyTotal'].includes(k)))throw new LeaseError('INVALID_PLAN','MacBook plan is invalid');
  const {promptrDailyTotal,cognispecDailyTotal}=plan;
- if(!Number.isInteger(promptrDailyTotal)||promptrDailyTotal<0||promptrDailyTotal>3000||!Number.isInteger(cognispecDailyTotal)||cognispecDailyTotal<0||cognispecDailyTotal>2000)throw new LeaseError('INVALID_PLAN','MacBook plan exceeds its approved caps');
+ if(!Number.isInteger(promptrDailyTotal)||promptrDailyTotal<0||promptrDailyTotal>MACBOOK_MAX_TARGET||!Number.isInteger(cognispecDailyTotal)||cognispecDailyTotal<0||cognispecDailyTotal>MACBOOK_MAX_TARGET)throw new LeaseError('INVALID_PLAN','MacBook plan exceeds its permitted range');
  return {promptrDailyTotal,cognispecDailyTotal};
 }
 function prepareMacBookPlan(plan,root=macbookPlanRoot){

@@ -127,9 +127,9 @@ test('unchanged saves avoid empty commits and malformed stored configuration is 
   assert.equal((await invoke('POST',{settings:DEFAULTS})).code,502);assert.equal(writes,0);
 });
 
-test('MacBook daily target caps accept reductions and reject increases',async()=>{
- for(const settings of [{...DEFAULTS,promptrDailyTotal:0,cognispecDailyTotal:0},{...DEFAULTS,promptrDailyTotal:3000,cognispecDailyTotal:2000}]){
+test('MacBook daily targets accept any whole number up to the typo guard',async()=>{
+ for(const settings of [{...DEFAULTS,promptrDailyTotal:0,cognispecDailyTotal:0},{...DEFAULTS,promptrDailyTotal:3000,cognispecDailyTotal:2000},{...DEFAULTS,promptrDailyTotal:9000,cognispecDailyTotal:50000}]){
   globalThis.fetch=async()=>new Response(JSON.stringify({sha:'fixture',content:Buffer.from(JSON.stringify(settings)).toString('base64')}));assert.equal((await invoke('POST',{settings})).code,200);
  }
- for(const settings of [{...DEFAULTS,promptrDailyTotal:3001},{...DEFAULTS,cognispecDailyTotal:2001},{...DEFAULTS,promptrDailyTotal:-1},{...DEFAULTS,cognispecDailyTotal:1.5}]){globalThis.fetch=()=>{throw new Error('must not call');};assert.equal((await invoke('POST',{settings})).code,400);}
+ for(const settings of [{...DEFAULTS,promptrDailyTotal:50001},{...DEFAULTS,cognispecDailyTotal:50001},{...DEFAULTS,promptrDailyTotal:-1},{...DEFAULTS,cognispecDailyTotal:1.5}]){globalThis.fetch=()=>{throw new Error('must not call');};assert.equal((await invoke('POST',{settings})).code,400);}
 });

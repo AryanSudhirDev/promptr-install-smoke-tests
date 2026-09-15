@@ -65,7 +65,7 @@ try {
   const r = await fetch(`https://raw.githubusercontent.com/${REPO}/main/monitor-config.json?t=${Date.now()}`, { signal: AbortSignal.timeout(15000) });
   if (r.ok) {
     const config = await r.json();
-    const toRate = n => Number.isInteger(n) && n >= 0 && n <= 8000 ? n : null;
+    const toRate = n => Number.isInteger(n) && n >= 0 && n <= 50000 ? n : null;
     imacTotal = toRate(config.imacDailyTotal);
     cognispecTotal = toRate(config.cognispecDailyTotal);
   }

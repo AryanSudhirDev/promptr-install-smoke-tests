@@ -7,7 +7,9 @@ const CONFIG_PATH = 'macbook-config.json';
 const ORIGINS = new Set(['https://aryansudhirdev.github.io', 'https://promptr-qa-dashboard.vercel.app',
   'http://localhost:4321', 'http://localhost:4322', 'http://localhost:4323']);
 const FIELDS = ['enabled', 'minBatteryPercent', 'pollIntervalMinutes', 'requireAC', 'requireHome', 'promptrDailyTotal', 'cognispecDailyTotal'];
-const DEFAULT_TARGETS = {promptrDailyTotal:3000,cognispecDailyTotal:2000};
+// Defaults are the current plan; MAX_TARGET is only a typo guard, not the approved volume. It must stay
+// equal to the bounds in macbook/policy.mjs and imac/macbook-broker.mjs, which enforce it last.
+const DEFAULT_TARGETS = {promptrDailyTotal:3000,cognispecDailyTotal:2000}, MAX_TARGET = 50000;
 const isBool = v => typeof v === 'boolean';
 const isIntInRange = (v, min, max) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
@@ -21,8 +23,8 @@ function validateSettings(s) {
   if (!isIntInRange(s.pollIntervalMinutes, 1, 60)) return null;
   if (!isBool(s.requireAC)) return null;
   if (!isBool(s.requireHome)) return null;
-  if (!isIntInRange(s.promptrDailyTotal, 0, 3000)) return null;
-  if (!isIntInRange(s.cognispecDailyTotal, 0, 2000)) return null;
+  if (!isIntInRange(s.promptrDailyTotal, 0, MAX_TARGET)) return null;
+  if (!isIntInRange(s.cognispecDailyTotal, 0, MAX_TARGET)) return null;
   return { enabled: s.enabled, minBatteryPercent: s.minBatteryPercent, pollIntervalMinutes: s.pollIntervalMinutes, requireAC: s.requireAC, requireHome: s.requireHome, promptrDailyTotal:s.promptrDailyTotal, cognispecDailyTotal:s.cognispecDailyTotal };
 }
 function extractSettings(config) {
@@ -79,7 +81,7 @@ export default async function handler(req, res) {
   const bodyKeys = Object.keys(body);
   if (bodyKeys.length !== 1 || bodyKeys[0] !== 'settings') return res.status(400).json({ error: 'body must contain only settings' });
   const next = validateSettings(body.settings);
-  if (!next) return res.status(400).json({ error: 'settings must include the five power/home fields plus promptrDailyTotal (integer 0-3000) and cognispecDailyTotal (integer 0-2000), with no extra fields' });
+  if (!next) return res.status(400).json({ error: 'settings must include the five power/home fields plus promptrDailyTotal and cognispecDailyTotal (integers 0-' + MAX_TARGET + '), with no extra fields' });
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       const cur = await gh(`/contents/${CONFIG_PATH}`);

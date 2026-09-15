@@ -223,7 +223,7 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 
 Source: `imac/`. Deployed under `~/promptr-qa/monitor` on the iMac.
 
-- The iMac dashboard accepts 1–8000 checks/day; GitHub remains capped at 1000. The host reads the existing repo setting every invocation.
+- The iMac dashboard accepts any whole number up to the 50,000/day ledger guard and shows the fleet estimate as advice rather than a limit; GitHub remains capped at 1000. The host reads the existing repo setting every invocation.
 - Five-minute slots at :02/:07/.../:57, 288 per UTC day. Exact total uses cumulative integer allocation, so 780 means 2–3 checks per slot, not six per half-hour.
 - Maximum three concurrent containers. Launchd prevents overlapping service runs; a PID lock also protects manual invocations.
 - Durable per-job queue (`scheduler-v2.json`): max 100 jobs or 20 minutes of new starts per invocation; untouched jobs remain pending. Started jobs are not retried automatically after interruption.
@@ -233,7 +233,7 @@ Source: `imac/`. Deployed under `~/promptr-qa/monitor` on the iMac.
 - Installation success requires the extension-test success marker, not just a successful container exit.
 - Local `status-v2.json` and `history.jsonl` expose passed/failed/pending/expired/interrupted counts. Hosted dashboard still lacks the iMac heartbeat and must not infer health from a setting.
 - Pre-migration runner and plist backed up at `~/promptr-qa/monitor/backups/pre-v2/`.
-- Regression: `npm run test:dashboard` includes every allowed iMac total from 1 through 8000, changes, midnight rollover, batch caps, and expiration, without running containers or downloading the extension.
+- Regression: `npm run test:dashboard` includes every iMac total from 1 through 8000, changes, midnight rollover, batch caps, and expiration, without running containers or downloading the extension.
 
 ### iMac ceiling increased to 8,000 (2026-09-09)
 
@@ -355,13 +355,21 @@ The cost side is known and accepted, not overlooked. Open VSX counts these downl
 | Value | Location |
 | --- | --- |
 | iMac daily targets | `monitor-config.json` (`imacDailyTotal`, `cognispecDailyTotal`) |
-| MacBook cap, dashboard API | `api/macbook.js` (`DEFAULT_TARGETS`, both `isIntInRange` bounds, the 400-error text) |
-| MacBook cap, local policy | `macbook/policy.mjs` (`DEFAULT_SETTINGS` and both validation bounds) |
-| MacBook cap, authoritative | `imac/macbook-broker.mjs` (`validateMacBookPlan`) |
-| MacBook cap, page | `docs/macbook.html` (input `max`, the client `isIntInRange` mirror, hint and message copy) |
+| MacBook default plan and guard | `api/macbook.js` (`DEFAULT_TARGETS`, `MAX_TARGET`) |
+| MacBook local policy | `macbook/policy.mjs` (`DEFAULT_SETTINGS`, `MAX_TARGET`) |
+| MacBook guard, authoritative | `imac/macbook-broker.mjs` (`MACBOOK_MAX_TARGET`, `validateMacBookPlan`) |
+| MacBook page | `docs/macbook.html` (`MAX_TARGET`, hint and message copy) |
 | MacBook saved plan | `macbook-config.json` |
+| iMac ledger guard | `imac/schedule.mjs` (`MAX_TOTAL`), `api/settings.js` (`MAX_IMAC`), `docs/index.html` (`MAX_IMAC`) |
+| Displayed fleet estimate | `docs/index.html` (`FLEET_ESTIMATE`), `docs/macbook.html` (`#fleet-note` copy) |
 
-All three MacBook enforcement layers must accept a value before any config carries it, and two of them run from copies rather than from this repo. Deploy in this order: the iMac's broker copy at `/Users/Aryan/promptr-qa/monitor/macbook-broker.mjs` (write via a temp file plus `mv`; no restart needed, the broker is spawned per SSH call), then the MacBook runtime with `node macbook/install.mjs` using the arguments already in its `local.json` (this recopies the runtime and reloads the LaunchAgent; a first `bootstrap` failing with the generic error 5 is known, retry it), then commit and push. Pushing a config above a stale cap makes the MacBook supervisor fail closed with `settings_unavailable` and the broker reject the plan with `INVALID_PLAN`. Vercel redeploys `api/macbook.js` from `main` automatically and GitHub Pages serves `docs/macbook.html` from `main`; the iMac re-reads `monitor-config.json` at the start of every five-minute run and applies a change to future slots, prorated, never backfilled. `imac/schedule.mjs` independently limits any single target to 8000/day, and each invocation still starts at most 100 jobs or 20 minutes of new work.
+All three MacBook enforcement layers must accept a value before any config carries it, and two of them run from copies rather than from this repo. Deploy in this order: the iMac's broker copy at `/Users/Aryan/promptr-qa/monitor/macbook-broker.mjs` (write via a temp file plus `mv`; no restart needed, the broker is spawned per SSH call), then the MacBook runtime with `node macbook/install.mjs` using the arguments already in its `local.json` (this recopies the runtime and reloads the LaunchAgent; a first `bootstrap` failing with the generic error 5 is known, retry it), then commit and push. Pushing a config above a stale cap makes the MacBook supervisor fail closed with `settings_unavailable` and the broker reject the plan with `INVALID_PLAN`. Vercel redeploys `api/macbook.js` from `main` automatically and GitHub Pages serves `docs/macbook.html` from `main`; the iMac re-reads `monitor-config.json` at the start of every five-minute run and applies a change to future slots, prorated, never backfilled. Each invocation still starts at most 100 jobs or 20 minutes of new work.
+
+### The dashboards do not cap you (2026-09-14)
+
+Neither rate page clamps a target to an achievable rate any more. The iMac inputs on `docs/index.html` and both MacBook inputs on `docs/macbook.html` accept any whole number, and every remaining upper bound is a typo guard for the job ledger rather than a volume policy: `MAX_TOTAL` in `imac/schedule.mjs`, `MAX_IMAC` in `api/settings.js`, and `MAX_TARGET` in `api/macbook.js`, `macbook/policy.mjs`, `imac/macbook-broker.mjs` and the `docs/macbook.html` script, all 50,000/day per target. Keep them equal. If `api/settings.js` ever accepts a total that `imac/schedule.mjs` rejects, the save appears to succeed and `imac/monitor.mjs` silently keeps its previous rates, because it catches the invalid-config error; if either MacBook surface accepts a value the broker rejects, the plan fails closed with `INVALID_PLAN`. Deploy the iMac's `schedule.mjs` and `macbook-broker.mjs` copies before raising anything on the web side. The only real ceiling left is GitHub's 1000/day, kept because each of those checks is a hosted VM job.
+
+In place of a cap, both pages display the ceiling. The control panel heading shows the configured iMac total as a percentage of the fleet estimate and turns amber above it; the runner details and the MacBook page carry the full sentence. The estimate is about 14,000 checks/day, derived from three concurrent checks averaging 18.5 seconds, shared between the iMac and the MacBook. It is an estimate, not a measured sustainable maximum. Exceeding it is allowed and is not an error: slot allocation continues, work beyond what three containers can run stays pending, and unstarted jobs expire after the six-hour catch-up window rather than accumulating forever. The MacBook's 3000/2000 remains the current plan, and it is no longer its ceiling; the broker still enforces the shared three-check concurrency cap and one outstanding lease, which is what actually bounds a MacBook plan.
 
 ### Watch list
 

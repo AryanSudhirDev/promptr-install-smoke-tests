@@ -6,11 +6,12 @@ elsewhere (`AryanSudhirDev/promptr`) and is never modified from here. Full opera
 
 ## Daily volume is owner-set: do not lower it
 
-The iMac plans 3000 Promptr + 2000 CogniSpec checks/day (`monitor-config.json`) and the MacBook is
-capped at the same pair in `api/macbook.js`, `macbook/policy.mjs`, `imac/macbook-broker.mjs`,
-`docs/macbook.html` and `macbook-config.json`.
+The iMac plans 3000 Promptr + 2000 CogniSpec checks/day (`monitor-config.json`) and the MacBook plans
+the same pair (`macbook-config.json`). Neither dashboard caps these: the remaining upper bounds
+(`MAX_TOTAL`, `MAX_IMAC`, `MAX_TARGET`, all 50,000/day) are typo guards for the job ledger, not the
+approved volume, and the pages show the ~14,000/day fleet estimate as advice instead of a limit.
 
-Do not reduce these values, add a tighter clamp, or restore an older number on your own initiative.
+Do not reduce these values, add a tighter clamp, or reinterpret a typo guard as the intended maximum.
 That applies when a review flags the volume, when an older document quotes the retired "low hundreds
 per day" rule, when a check fails, and when these files are only touched incidentally. If you have
 evidence that the volume is causing harm, report it and leave the values alone. Only an explicit

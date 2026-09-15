@@ -65,13 +65,14 @@
         <p class="hint" id="interval-hint">The device checks for updated settings on this interval (1 to 60 minutes). A saved change propagates on its next poll, not immediately.</p>
       </div>
       <div class="field-row">
-        <div class="num-row"><label for="promptrDailyTotal">Promptr daily maximum</label><div class="num-field"><input type="number" id="promptrDailyTotal" min="0" max="3000" step="1" inputmode="numeric"/><span aria-hidden="true">/day</span></div></div>
-        <p class="hint">Independent MacBook plan. You can reduce this from the approved 3,000/day cap, including to 0 to pause Promptr.</p>
+        <div class="num-row"><label for="promptrDailyTotal">Promptr daily maximum</label><div class="num-field"><input type="number" id="promptrDailyTotal" min="0" step="1" inputmode="numeric" aria-describedby="promptr-total-hint fleet-note"/><span aria-hidden="true">/day</span></div></div>
+        <p class="hint" id="promptr-total-hint">Independent MacBook plan, currently 3,000/day. This is not a ceiling: any whole number saves, and 0 pauses Promptr on the MacBook.</p>
       </div>
       <div class="field-row">
-        <div class="num-row"><label for="cognispecDailyTotal">CogniSpec daily maximum</label><div class="num-field"><input type="number" id="cognispecDailyTotal" min="0" max="2000" step="1" inputmode="numeric"/><span aria-hidden="true">/day</span></div></div>
-        <p class="hint">Independent MacBook plan. You can reduce this from the approved 2,000/day cap, including to 0 to pause CogniSpec.</p>
+        <div class="num-row"><label for="cognispecDailyTotal">CogniSpec daily maximum</label><div class="num-field"><input type="number" id="cognispecDailyTotal" min="0" step="1" inputmode="numeric" aria-describedby="cognispec-total-hint fleet-note"/><span aria-hidden="true">/day</span></div></div>
+        <p class="hint" id="cognispec-total-hint">Independent MacBook plan, currently 2,000/day. This is not a ceiling: any whole number saves, and 0 pauses CogniSpec on the MacBook.</p>
       </div>
+      <p class="hint" id="fleet-note">Advisory: three concurrent checks averaging 18.5s put the whole fleet near 14,000 checks/day, shared with the iMac's own 5,000/day plan. Higher MacBook numbers save and schedule; work beyond what the fleet runs simply queues, and unstarted jobs expire after the six-hour window.</p>
       <div class="field-row">
         <div class="toggle-row"><input type="checkbox" id="requireAC" aria-describedby="ac-hint"/><label for="requireAC">Require AC power</label></div>
         <p class="hint" id="ac-hint">Only run while plugged in.</p>
@@ -91,7 +92,7 @@
   </section>
   <section class="panel" aria-labelledby="pool-title">
     <h2 id="pool-title">Independent MacBook plan</h2>
-    <p class="lead" id="pool-copy">The MacBook has its own scheduled maximum: 3,000 Promptr and 2,000 CogniSpec checks per day by default, additive to the iMac targets. This page can reduce or pause either MacBook target. It does not change the iMac plan. Each check is a genuine fresh-install QA check; shared registry pacing and the three-container fleet safety limit remain in effect.</p>
+    <p class="lead" id="pool-copy">The MacBook has its own scheduled maximum: 3,000 Promptr and 2,000 CogniSpec checks per day at present, additive to the iMac targets. This page can change or pause either MacBook target, upward as well as downward. It does not change the iMac plan. Each check is a genuine fresh-install QA check; shared registry pacing and the three-container fleet safety limit remain in effect.</p>
   </section>
   <section class="panel" aria-labelledby="health-title">
     <h2 id="health-title">Device health</h2>
@@ -142,9 +143,12 @@ async function request(url, options = {}, kind = 'json') {
 let serverWritable = false, saving = false, settings = null, pending = null, dirty = false;
 const isBool = v => typeof v === 'boolean';
 const isIntInRange = (v, min, max) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+// Typo guard shared with api/macbook.js, macbook/policy.mjs and imac/macbook-broker.mjs, not a volume
+// policy: the MacBook daily targets are deliberately not clamped to what the fleet can run.
+const MAX_TARGET = 50000;
 function validateSettings(s) {
   if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
-  if (!isBool(s.enabled) || !isIntInRange(s.minBatteryPercent, 10, 95) || !isIntInRange(s.pollIntervalMinutes, 1, 60) || !isBool(s.requireAC) || !isBool(s.requireHome) || !isIntInRange(s.promptrDailyTotal,0,3000) || !isIntInRange(s.cognispecDailyTotal,0,2000)) return null;
+  if (!isBool(s.enabled) || !isIntInRange(s.minBatteryPercent, 10, 95) || !isIntInRange(s.pollIntervalMinutes, 1, 60) || !isBool(s.requireAC) || !isBool(s.requireHome) || !isIntInRange(s.promptrDailyTotal,0,MAX_TARGET) || !isIntInRange(s.cognispecDailyTotal,0,MAX_TARGET)) return null;
   return { enabled: s.enabled, minBatteryPercent: s.minBatteryPercent, pollIntervalMinutes: s.pollIntervalMinutes, requireAC: s.requireAC, requireHome: s.requireHome, promptrDailyTotal:s.promptrDailyTotal, cognispecDailyTotal:s.cognispecDailyTotal };
 }
 function readForm() {
@@ -206,7 +210,7 @@ async function submit(event) {
   const key = dashboardKey();
   if (!key) { $('tokbox').open = true; $('token').focus(); $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter your dashboard key in Access to change these settings.'; return; }
   const next = readForm(), valid = validateSettings(next);
-  if (!valid) { $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter valid whole-number power settings and daily maximums: Promptr 0 to 3,000, CogniSpec 0 to 2,000.'; return; }
+  if (!valid) { $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter valid whole-number power settings and daily maximums: whole numbers from 0 to ' + MAX_TARGET.toLocaleString() + '.'; return; }
   saving = true; renderForm(); $('save-msg').className = 'msg'; $('save-msg').textContent = 'Saving…';
   try {
     const j = await request(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-dash-key': key }, body: JSON.stringify({ settings: valid }) });
