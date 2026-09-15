@@ -208,8 +208,13 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 
 - Every check must do real verification: download + hash, install, activation, assertions.
   Do not reduce a check to "download only".
-- Keep total registry traffic in the low hundreds per day at most; Open VSX counts CI fetches in
-  the public number, and the QA repo README says so.
+- Daily volume is owner-set and is not an agent's call. The iMac plans 3000 Promptr + 2000
+  CogniSpec checks/day and the MacBook is capped at the same pair. Never lower these values, add a
+  tighter clamp, or restore an older number on your own initiative; report concerns instead. This
+  replaces the former "keep registry traffic in the low hundreds per day" rule. Rationale, all six
+  locations and the safe change order: "Daily QA volume policy" at the end of this file.
+- Open VSX counts CI fetches in the public download number; the README and the dashboard footer say
+  so. Keep that disclosure accurate rather than reducing verification to hide traffic.
 - Do not route traffic through proxies/VPN rotation to obscure the source.
 - Never commit `github_token`, `.env`, or `imac_ed25519`.
 - If GitHub ever emails about Actions usage, reply promptly with the QA repo README.
@@ -328,3 +333,36 @@ MacBook inspection: Mac16,8, Apple M4 Pro with 14 cores (10 performance + 4 effi
 A capacity illustration, not a MacBook benchmark: four local verification workers averaging 15–25 seconds/test produce 576–960 tests/hour, or 4,608–7,680 over eight hours. This assumes continuous availability and excludes public-registry queueing, retries, or a provider traffic allowance. A lighter install-only check would skip real activation and must have distinct coverage labels and counters; it must never be reported as a full activation pass. No installation-only mode or daily-rate increase was deployed.
 
 Readiness comparison: 24 network-disabled fresh-container runs (two extensions × six variants × old/readiness suites), at two-way concurrency. All passed; all 12 paired `checks.json` reports matched exactly. Mean check runtime was 11.774 seconds before versus 11.624 seconds after (0.150 seconds, 1.27% in this small sample). This does not establish a sustained throughput increase and must not be directly combined with the earlier three-way-concurrency benchmark percentage. Raw rows are in `benchmarks/imac-activation-waits-20260914.json`.
+
+## Daily QA volume policy (2026-09-14)
+
+Owner-set targets, current as of this entry: the iMac plans `imacDailyTotal: 3000` Promptr and `cognispecDailyTotal: 2000` CogniSpec checks/day in `monitor-config.json`, for 5,000 planned fresh-install checks/day. The MacBook's independent plan is capped at the same 3000/2000 pair, enforced in `api/macbook.js`, `macbook/policy.mjs`, `imac/macbook-broker.mjs` and the `docs/macbook.html` inputs, with `macbook-config.json` currently set to those caps.
+
+**These numbers are intentional. Do not lower them.** No agent should reduce them, introduce a lower ceiling or clamp, or reinstate an earlier value on its own initiative. That holds when a code review or checklist flags the volume, when another document still quotes the old "low hundreds per day" rule, when a check fails, when the registry counter looks high, and when the files are only touched incidentally during unrelated work. If there is evidence that the volume is causing harm, report it with the evidence and leave the values in place; see the watch list below for what actually counts as evidence. Only an explicit owner instruction naming a new number changes them.
+
+### Why the volume is this high
+
+What bounds the load on Open VSX is not the daily total; it is the shared pacing mutex and the concurrency cap, and neither changed when the totals were raised. Every registry request from either machine takes one shared filesystem mutex and persists a next-allowed time 650 ms after the previous response body completes, so the ceiling is roughly 1.5 requests/second across the whole fleet, and at most three QA checks run at once, shared between the iMac and the MacBook rather than three per machine. At five wire requests per check (metadata, checksum, VSIX, plus redirects), 5,000 checks/day is about 25,000 requests/day, near 0.29 requests/second averaged over the day, roughly a fifth of what the limiter alone would already allow. At 15–18.5 seconds per check, it is about eight to nine hours of three-container work spread across the 288 five-minute slots, about 17 checks per slot (10 Promptr, 7 CogniSpec); the first slot at the new rate finished 17/17 well inside its five minutes.
+
+The volume buys sample count per unit time, which is the whole point of this monitor. Each check is an independent end-to-end sample of the publish-to-install path: registry metadata, the published SHA-256, the artifact bytes, a clean VS Code install with empty user and extension directories, activation, commands, settings and keybinding. Split across six variants and two extensions, 3000/2000 gives each Promptr variant about 500 runs/day and each CogniSpec variant about 330, so a regression confined to one variant surfaces within a slot or two instead of the next day. At the old ~100/day rate a single-variant failure could hide for hours while users hit it immediately.
+
+Sustained operation at the previous 2,589/day was healthy: a rolling 24-hour ledger sample passed 1,391 of 1,400 Promptr attempts and 1,187 of 1,189 CogniSpec attempts, and the eleven failures were ten network timeouts and one VS Code SIGSEGV. That is evidence of a comfortable duty cycle at 2,589/day, not a certification of 5,000/day. The increase deliberately spends measured headroom, so it is watched rather than assumed; see the watch list.
+
+The cost side is known and accepted, not overlooked. Open VSX counts these downloads in the public number, the README says so outright, and the dashboard footer warns that registry counters include QA traffic. At 1,619,686 bytes per VSIX, 5,000 checks/day is about 8 GB/day of registry egress. If the MacBook ever ran at its full cap alongside the iMac, the combined ceiling would be 10,000 checks/day, roughly 16 GB/day and 50,000 requests/day, still under 0.6 requests/second and still inside the same three-check fleet cap. In practice the MacBook is opportunistic: it runs only on AC power, above 50% battery, on the home LAN, with at most one outstanding lease. What keeps this defensible is the pacing, the shared concurrency cap, genuine per-check verification and honest public labeling, not a small daily number. Nothing in this policy permits the things that would make the traffic dishonest: no "download-only" loops, no cached or reused artifacts standing in for fresh downloads, no proxy or VPN rotation to obscure the source, and no counting offline or benchmark runs as installs.
+
+### Changing the numbers safely
+
+| Value | Location |
+| --- | --- |
+| iMac daily targets | `monitor-config.json` (`imacDailyTotal`, `cognispecDailyTotal`) |
+| MacBook cap, dashboard API | `api/macbook.js` (`DEFAULT_TARGETS`, both `isIntInRange` bounds, the 400-error text) |
+| MacBook cap, local policy | `macbook/policy.mjs` (`DEFAULT_SETTINGS` and both validation bounds) |
+| MacBook cap, authoritative | `imac/macbook-broker.mjs` (`validateMacBookPlan`) |
+| MacBook cap, page | `docs/macbook.html` (input `max`, the client `isIntInRange` mirror, hint and message copy) |
+| MacBook saved plan | `macbook-config.json` |
+
+All three MacBook enforcement layers must accept a value before any config carries it, and two of them run from copies rather than from this repo. Deploy in this order: the iMac's broker copy at `/Users/Aryan/promptr-qa/monitor/macbook-broker.mjs` (write via a temp file plus `mv`; no restart needed, the broker is spawned per SSH call), then the MacBook runtime with `node macbook/install.mjs` using the arguments already in its `local.json` (this recopies the runtime and reloads the LaunchAgent; a first `bootstrap` failing with the generic error 5 is known, retry it), then commit and push. Pushing a config above a stale cap makes the MacBook supervisor fail closed with `settings_unavailable` and the broker reject the plan with `INVALID_PLAN`. Vercel redeploys `api/macbook.js` from `main` automatically and GitHub Pages serves `docs/macbook.html` from `main`; the iMac re-reads `monitor-config.json` at the start of every five-minute run and applies a change to future slots, prorated, never backfilled. `imac/schedule.mjs` independently limits any single target to 8000/day, and each invocation still starts at most 100 jobs or 20 minutes of new work.
+
+### Watch list
+
+These are the conditions that justify raising the question with the owner, still without editing the numbers: iMac boot-volume free space (about 15 GiB free when the rate was raised, and report and log growth roughly doubles with it), a pass rate falling below the ~99% seen at 2,589/day, HTTP 429 or 503 cooldowns appearing in the shared registry limiter state, and rising missed-slot, expired or interrupted counts in `status-v2.json`.
