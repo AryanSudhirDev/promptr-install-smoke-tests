@@ -1,12 +1,12 @@
 import os from 'node:os';
-export const DEFAULT_SETTINGS={enabled:true,minBatteryPercent:50,pollIntervalMinutes:10,requireAC:true,requireHome:true,promptrDailyTotal:1400,cognispecDailyTotal:1189};
+export const DEFAULT_SETTINGS={enabled:true,minBatteryPercent:50,pollIntervalMinutes:10,requireAC:true,requireHome:true,promptrDailyTotal:3000,cognispecDailyTotal:2000};
 export function validateSettings(s){
  if(!s||typeof s!=='object'||Array.isArray(s)||Object.keys(s).length!==Object.keys(DEFAULT_SETTINGS).length||Object.keys(s).some(k=>!Object.hasOwn(DEFAULT_SETTINGS,k)))throw new Error('Invalid MacBook settings');
  for(const k of ['enabled','requireAC','requireHome'])if(typeof s[k]!=='boolean')throw new Error('Invalid '+k);
  if(!Number.isInteger(s.minBatteryPercent)||s.minBatteryPercent<10||s.minBatteryPercent>95)throw new Error('Invalid battery threshold');
  if(!Number.isInteger(s.pollIntervalMinutes)||s.pollIntervalMinutes<1||s.pollIntervalMinutes>60)throw new Error('Invalid check interval');
- if(!Number.isInteger(s.promptrDailyTotal)||s.promptrDailyTotal<0||s.promptrDailyTotal>1400)throw new Error('Invalid Promptr daily target');
- if(!Number.isInteger(s.cognispecDailyTotal)||s.cognispecDailyTotal<0||s.cognispecDailyTotal>1189)throw new Error('Invalid CogniSpec daily target');
+ if(!Number.isInteger(s.promptrDailyTotal)||s.promptrDailyTotal<0||s.promptrDailyTotal>3000)throw new Error('Invalid Promptr daily target');
+ if(!Number.isInteger(s.cognispecDailyTotal)||s.cognispecDailyTotal<0||s.cognispecDailyTotal>2000)throw new Error('Invalid CogniSpec daily target');
  return {...s};
 }
 export function parsePower(text){

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../api/macbook.js', import.meta.url), 'utf8');
 const { default: handler } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 process.env.GH_TOKEN = 'test-only'; process.env.DASH_KEY = 'test-key';
-const DEFAULTS = { enabled: true, minBatteryPercent: 50, pollIntervalMinutes: 10, requireAC: true, requireHome: true, promptrDailyTotal: 1400, cognispecDailyTotal: 1189 };
+const DEFAULTS = { enabled: true, minBatteryPercent: 50, pollIntervalMinutes: 10, requireAC: true, requireHome: true, promptrDailyTotal: 3000, cognispecDailyTotal: 2000 };
 async function invoke(method, body, extra = {}) {
   const r = { headers: {}, setHeader(k,v) { this.headers[k]=v; }, status(s) { this.code=s; return this; },
     json(b) { this.body=b; return this; }, end() { return this; } };
@@ -128,8 +128,8 @@ test('unchanged saves avoid empty commits and malformed stored configuration is 
 });
 
 test('MacBook daily target caps accept reductions and reject increases',async()=>{
- for(const settings of [{...DEFAULTS,promptrDailyTotal:0,cognispecDailyTotal:0},{...DEFAULTS,promptrDailyTotal:1400,cognispecDailyTotal:1189}]){
+ for(const settings of [{...DEFAULTS,promptrDailyTotal:0,cognispecDailyTotal:0},{...DEFAULTS,promptrDailyTotal:3000,cognispecDailyTotal:2000}]){
   globalThis.fetch=async()=>new Response(JSON.stringify({sha:'fixture',content:Buffer.from(JSON.stringify(settings)).toString('base64')}));assert.equal((await invoke('POST',{settings})).code,200);
  }
- for(const settings of [{...DEFAULTS,promptrDailyTotal:1401},{...DEFAULTS,cognispecDailyTotal:1190},{...DEFAULTS,promptrDailyTotal:-1},{...DEFAULTS,cognispecDailyTotal:1.5}]){globalThis.fetch=()=>{throw new Error('must not call');};assert.equal((await invoke('POST',{settings})).code,400);}
+ for(const settings of [{...DEFAULTS,promptrDailyTotal:3001},{...DEFAULTS,cognispecDailyTotal:2001},{...DEFAULTS,promptrDailyTotal:-1},{...DEFAULTS,cognispecDailyTotal:1.5}]){globalThis.fetch=()=>{throw new Error('must not call');};assert.equal((await invoke('POST',{settings})).code,400);}
 });

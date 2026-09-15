@@ -4,6 +4,6 @@
   "pollIntervalMinutes": 10,
   "requireAC": true,
   "requireHome": true,
-  "promptrDailyTotal": 1400,
-  "cognispecDailyTotal": 1189
+  "promptrDailyTotal": 3000,
+  "cognispecDailyTotal": 2000
 }

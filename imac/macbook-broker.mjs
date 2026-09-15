@@ -43,7 +43,7 @@ export function readTotals(root=here){
 export function validateMacBookPlan(plan){
  if(!plan||typeof plan!=='object'||Array.isArray(plan)||Object.keys(plan).some(k=>!['promptrDailyTotal','cognispecDailyTotal'].includes(k)))throw new LeaseError('INVALID_PLAN','MacBook plan is invalid');
  const {promptrDailyTotal,cognispecDailyTotal}=plan;
- if(!Number.isInteger(promptrDailyTotal)||promptrDailyTotal<0||promptrDailyTotal>1400||!Number.isInteger(cognispecDailyTotal)||cognispecDailyTotal<0||cognispecDailyTotal>1189)throw new LeaseError('INVALID_PLAN','MacBook plan exceeds its approved caps');
+ if(!Number.isInteger(promptrDailyTotal)||promptrDailyTotal<0||promptrDailyTotal>3000||!Number.isInteger(cognispecDailyTotal)||cognispecDailyTotal<0||cognispecDailyTotal>2000)throw new LeaseError('INVALID_PLAN','MacBook plan exceeds its approved caps');
  return {promptrDailyTotal,cognispecDailyTotal};
 }
 function prepareMacBookPlan(plan,root=macbookPlanRoot){
