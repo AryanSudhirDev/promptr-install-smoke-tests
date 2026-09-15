@@ -33,19 +33,19 @@ test('overnight adds lanes only when Docker RAM can hold extra 2 GiB containers'
  assert.equal(dockerGiB(8320954368),7.7);
 });
 
-test('overnight night plan is 6000 Promptr and 3500 CogniSpec over eight hours',()=>{
+test('overnight night plan is 3500 Promptr and 6000 CogniSpec over eight hours',()=>{
  const overnight=startOvernightState({now,hours:8});
- const plan=overnightClaimPlan({promptrDailyTotal:3000,cognispecDailyTotal:2000},{overnight,memTotalBytes:gib(24),now});
+ const plan=overnightClaimPlan({promptrDailyTotal:2000,cognispecDailyTotal:3000},{overnight,memTotalBytes:gib(24),now});
  assert.equal(plan.workers,11);
- assert.equal(plan.promptrNightChecks,6000);
- assert.equal(plan.cognispecNightChecks,3500);
+ assert.equal(plan.promptrNightChecks,3500);
+ assert.equal(plan.cognispecNightChecks,6000);
  assert.equal(plan.nightChecks,9500);
  assert.equal(plan.perHour,1187);
  assert.ok(plan.computePerHour>plan.perHour);
- assert.equal(plan.promptrDailyTotal,18000);
- assert.equal(plan.cognispecDailyTotal,10500);
- const day=overnightClaimPlan({promptrDailyTotal:3000,cognispecDailyTotal:2000},{overnight:null,memTotalBytes:gib(24),now});
- assert.deepEqual({promptrDailyTotal:day.promptrDailyTotal,cognispecDailyTotal:day.cognispecDailyTotal,workers:day.workers},{promptrDailyTotal:3000,cognispecDailyTotal:2000,workers:3});
+ assert.equal(plan.promptrDailyTotal,10500);
+ assert.equal(plan.cognispecDailyTotal,18000);
+ const day=overnightClaimPlan({promptrDailyTotal:2000,cognispecDailyTotal:3000},{overnight:null,memTotalBytes:gib(24),now});
+ assert.deepEqual({promptrDailyTotal:day.promptrDailyTotal,cognispecDailyTotal:day.cognispecDailyTotal,workers:day.workers},{promptrDailyTotal:2000,cognispecDailyTotal:3000,workers:3});
  assert.equal(overnightNightChecks({workers:3,hours:8}).nightChecks,4670);
 });
 

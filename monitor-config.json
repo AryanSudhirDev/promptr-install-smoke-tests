@@ -1,5 +1,5 @@
 {
-  "imacDailyTotal": 6000,
+  "imacDailyTotal": 4000,
   "note": "Planned fresh-install QA checks per day, not a promised public download count. Both iMac targets share concurrency and registry pacing.",
-  "cognispecDailyTotal": 4000
+  "cognispecDailyTotal": 6000
 }
