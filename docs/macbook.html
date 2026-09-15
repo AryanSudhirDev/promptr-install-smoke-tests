@@ -65,6 +65,14 @@
         <p class="hint" id="interval-hint">The device checks for updated settings on this interval (1 to 60 minutes). A saved change propagates on its next poll, not immediately.</p>
       </div>
       <div class="field-row">
+        <div class="num-row"><label for="promptrDailyTotal">Promptr daily maximum</label><div class="num-field"><input type="number" id="promptrDailyTotal" min="0" max="1400" step="1" inputmode="numeric"/><span aria-hidden="true">/day</span></div></div>
+        <p class="hint">Independent MacBook plan. You can reduce this from the approved 1,400/day cap, including to 0 to pause Promptr.</p>
+      </div>
+      <div class="field-row">
+        <div class="num-row"><label for="cognispecDailyTotal">CogniSpec daily maximum</label><div class="num-field"><input type="number" id="cognispecDailyTotal" min="0" max="1189" step="1" inputmode="numeric"/><span aria-hidden="true">/day</span></div></div>
+        <p class="hint">Independent MacBook plan. You can reduce this from the approved 1,189/day cap, including to 0 to pause CogniSpec.</p>
+      </div>
+      <div class="field-row">
         <div class="toggle-row"><input type="checkbox" id="requireAC" aria-describedby="ac-hint"/><label for="requireAC">Require AC power</label></div>
         <p class="hint" id="ac-hint">Only run while plugged in.</p>
         <p class="hint warn-hint" id="ac-warn" hidden>Turning this off lets checks run on battery power.</p>
@@ -82,8 +90,8 @@
     </form>
   </section>
   <section class="panel" aria-labelledby="pool-title">
-    <h2 id="pool-title">Shared check pool</h2>
-    <p class="lead" id="pool-copy">This MacBook shares the same planned check pool as the iMac fleet. There is no separate public-download quota just for this device: at most one check is delegated to the MacBook at a time, and the fleet as a whole runs at most three checks concurrently. Raw daily check totals stay configured on the extension monitor page and are unchanged by this page.</p>
+    <h2 id="pool-title">Independent MacBook plan</h2>
+    <p class="lead" id="pool-copy">The MacBook has its own scheduled maximum: 1,400 Promptr and 1,189 CogniSpec checks per day by default, additive to the iMac targets. This page can reduce or pause either MacBook target. It does not change the iMac plan. Each check is a genuine fresh-install QA check; shared registry pacing and the three-container fleet safety limit remain in effect.</p>
   </section>
   <section class="panel" aria-labelledby="health-title">
     <h2 id="health-title">Device health</h2>
@@ -136,8 +144,8 @@ const isBool = v => typeof v === 'boolean';
 const isIntInRange = (v, min, max) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 function validateSettings(s) {
   if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
-  if (!isBool(s.enabled) || !isIntInRange(s.minBatteryPercent, 10, 95) || !isIntInRange(s.pollIntervalMinutes, 1, 60) || !isBool(s.requireAC) || !isBool(s.requireHome)) return null;
-  return { enabled: s.enabled, minBatteryPercent: s.minBatteryPercent, pollIntervalMinutes: s.pollIntervalMinutes, requireAC: s.requireAC, requireHome: s.requireHome };
+  if (!isBool(s.enabled) || !isIntInRange(s.minBatteryPercent, 10, 95) || !isIntInRange(s.pollIntervalMinutes, 1, 60) || !isBool(s.requireAC) || !isBool(s.requireHome) || !isIntInRange(s.promptrDailyTotal,0,1400) || !isIntInRange(s.cognispecDailyTotal,0,1189)) return null;
+  return { enabled: s.enabled, minBatteryPercent: s.minBatteryPercent, pollIntervalMinutes: s.pollIntervalMinutes, requireAC: s.requireAC, requireHome: s.requireHome, promptrDailyTotal:s.promptrDailyTotal, cognispecDailyTotal:s.cognispecDailyTotal };
 }
 function readForm() {
   return {
@@ -146,6 +154,8 @@ function readForm() {
     pollIntervalMinutes: Number($('pollInterval').value),
     requireAC: $('requireAC').checked,
     requireHome: $('requireHome').checked,
+    promptrDailyTotal:Number($('promptrDailyTotal').value),
+    cognispecDailyTotal:Number($('cognispecDailyTotal').value),
   };
 }
 function renderForm() {
@@ -155,17 +165,19 @@ function renderForm() {
     $('pollInterval').value = settings.pollIntervalMinutes;
     $('requireAC').checked = settings.requireAC;
     $('requireHome').checked = settings.requireHome;
+    $('promptrDailyTotal').value = settings.promptrDailyTotal;
+    $('cognispecDailyTotal').value = settings.cognispecDailyTotal;
   }
-  for (const id of ['enabled', 'minBattery', 'pollInterval', 'requireAC', 'requireHome']) $(id).disabled = saving;
+  for (const id of ['enabled', 'minBattery', 'pollInterval', 'requireAC', 'requireHome', 'promptrDailyTotal', 'cognispecDailyTotal']) $(id).disabled = saving;
   $('ac-warn').hidden = $('requireAC').checked;
   $('home-warn').hidden = $('requireHome').checked;
   $('config-state').textContent = !settings
     ? 'Current settings unavailable. Unable to read the stored configuration.'
-    : 'Configured: enabled=' + settings.enabled + ', battery>' + settings.minBatteryPercent + '%, poll every ' + settings.pollIntervalMinutes + ' min, requireAC=' + settings.requireAC + ', requireHome=' + settings.requireHome
+    : 'Configured: enabled=' + settings.enabled + ', battery>' + settings.minBatteryPercent + '%, poll every ' + settings.pollIntervalMinutes + ' min, requireAC=' + settings.requireAC + ', requireHome=' + settings.requireHome + ', Promptr=' + settings.promptrDailyTotal + '/day, CogniSpec=' + settings.cognispecDailyTotal + '/day'
       + (pending ? ' (accepted, awaiting server confirmation)' : ' (server setting)');
   refreshTokenUi();
 }
-for (const id of ['enabled', 'minBattery', 'pollInterval', 'requireAC', 'requireHome']) $(id).addEventListener('input', () => { dirty = true; });
+for (const id of ['enabled', 'minBattery', 'pollInterval', 'requireAC', 'requireHome', 'promptrDailyTotal', 'cognispecDailyTotal']) $(id).addEventListener('input', () => { dirty = true; });
 async function load() {
   let readError = null;
   try {
@@ -194,7 +206,7 @@ async function submit(event) {
   const key = dashboardKey();
   if (!key) { $('tokbox').open = true; $('token').focus(); $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter your dashboard key in Access to change these settings.'; return; }
   const next = readForm(), valid = validateSettings(next);
-  if (!valid) { $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter a whole number battery percent from 10 to 95 and a poll interval from 1 to 60 minutes.'; return; }
+  if (!valid) { $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter valid whole-number power settings and daily maximums: Promptr 0 to 1,400, CogniSpec 0 to 1,189.'; return; }
   saving = true; renderForm(); $('save-msg').className = 'msg'; $('save-msg').textContent = 'Saving…';
   try {
     const j = await request(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-dash-key': key }, body: JSON.stringify({ settings: valid }) });

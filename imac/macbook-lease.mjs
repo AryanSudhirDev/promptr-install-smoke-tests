@@ -35,9 +35,9 @@ export const variantForJob=job=>VARIANTS[(Math.floor(job.slot/300000)+job.index)
 export const isActiveRemoteLease=job=>job.remoteHost==='macbook'&&REMOTE_FENCED_STATUSES.has(job.status);
 export const activeRemoteLeases=stores=>jobsOf(stores).filter(({job})=>isActiveRemoteLease(job));
 export const outstandingRemoteLeases=stores=>activeRemoteLeases(stores).sort((a,b)=>a.job.slot-b.job.slot||a.job.index-b.job.index||a.job.id.localeCompare(b.job.id));
-export function advanceTargetWithRemoteFencing(state,now,key,total){
+export function advanceTargetWithRemoteFencing(state,now,key,total,idPrefix=''){
  const fenced=Object.values(state?.jobs||{}).filter(isActiveRemoteLease);
- const advanced=advanceTarget(state,now,key,total);
+ const advanced=advanceTarget(state,now,key,total,idPrefix);
  if(advanced)for(const job of fenced)advanced.jobs[job.id]??=job;
  return advanced;
 }
@@ -55,12 +55,26 @@ export function expireRemoteLeases(stores,now=Date.now()){
  return expired;
 }
 
-export function remoteCapacity(stores,{now=Date.now(),activeLocalContainers=0}={}){
- if(!Number.isInteger(activeLocalContainers)||activeLocalContainers<0)throw new LeaseError('INVALID_ACTIVITY','Invalid local container count');
- const remote=activeRemoteLeases(stores).length;
+export function remoteCapacity(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0}={}){
+ if(!Number.isInteger(activeLocalContainers)||activeLocalContainers<0||!Number.isInteger(externalRemoteCount)||externalRemoteCount<0)throw new LeaseError('INVALID_ACTIVITY','Invalid local container count');
+ const remote=activeRemoteLeases(stores).length+externalRemoteCount;
  const ledgerLocal=ledgerLocalActivity(stores).length;
+ // A running iMac check normally appears in both Docker and the ledger. Use the
+ // larger observation so it occupies one fleet slot rather than being counted twice.
  const local=Math.max(activeLocalContainers,ledgerLocal);
  return {remote,local,total:remote+local,remaining:Math.max(0,GLOBAL_CHECK_CAP-remote-local)};
+}
+
+export function reserveLocalJob(stores,jobId,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0}={}){
+ expireRemoteLeases(stores,now);
+ const selected=jobsOf(stores).find(({job})=>job.id===jobId);
+ if(!selected||selected.job.status!=='pending')return {started:false,reason:'not_pending'};
+ const capacity=remoteCapacity(stores,{now,activeLocalContainers,externalRemoteCount});
+ if(capacity.remaining<1)return {started:false,reason:'capacity',capacity};
+ const {store,job}=selected,variant=variantForJob(job);
+ Object.assign(job,{target:store.key,status:'started',startedAt:new Date(now).toISOString()});
+ delete job.remoteHost;delete job.leaseToken;delete job.leaseUntil;delete job.finishedAt;delete job.error;
+ return {started:true,store,job,variant,capacity};
 }
 
 export function createLeaseToken(randomBytes=crypto.randomBytes){
@@ -69,10 +83,9 @@ export function createLeaseToken(randomBytes=crypto.randomBytes){
  return token;
 }
 
-export function reserveRemoteLease(stores,{now=Date.now(),activeLocalContainers=0,leaseToken=createLeaseToken()}={}){
+export function reserveRemoteLease(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0,leaseToken=createLeaseToken()}={}){
  expireRemoteLeases(stores,now);
- const capacity=remoteCapacity(stores,{now,activeLocalContainers});
- if(capacity.local>0)throw new LeaseError('LOCAL_ACTIVE','Local QA work is active',{retryAfterMs:1000});
+ const capacity=remoteCapacity(stores,{now,activeLocalContainers,externalRemoteCount});
  if(capacity.remote>0){
   const until=Math.min(...activeRemoteLeases(stores).map(({job})=>asTime(job.leaseUntil)).filter(Number.isFinite));
   throw new LeaseError('REMOTE_ACTIVE','A MacBook lease is already active',{retryAfterMs:boundedRetryAfter(until-now)});
@@ -186,7 +199,7 @@ export function validateCompletionRequest(request){
  if(!request||typeof request!=='object'||Array.isArray(request))throw new LeaseError('INVALID_REQUEST','Completion payload must be an object');
  const allowed=new Set(['jobId','leaseToken','status','seconds','reports','error','cleanupConfirmed']);
  for(const key of Object.keys(request))if(!allowed.has(key))throw new LeaseError('INVALID_REQUEST',`Unexpected completion field: ${key}`);
- if(typeof request.jobId!=='string'||!/^(?:cognispec-)?v2-[A-Za-z0-9-]{8,80}$/.test(request.jobId))throw new LeaseError('INVALID_REQUEST','Invalid jobId');
+ if(typeof request.jobId!=='string'||!/^(?:(?:macbook-)?(?:cognispec-)?|(?:cognispec-)?(?:macbook-)?)v2-[A-Za-z0-9-]{8,80}$/.test(request.jobId))throw new LeaseError('INVALID_REQUEST','Invalid jobId');
  if(typeof request.leaseToken!=='string'||request.leaseToken.length>128)throw new LeaseError('INVALID_REQUEST','Invalid leaseToken');
  if(!['passed','failed'].includes(request.status))throw new LeaseError('INVALID_REQUEST','status must be passed or failed');
  if(request.cleanupConfirmed!==true)throw new LeaseError('CLEANUP_NOT_CONFIRMED','cleanupConfirmed must be true after the MacBook container is verified absent');

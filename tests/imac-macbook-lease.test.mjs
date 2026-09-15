@@ -50,7 +50,7 @@ test('one remote lease and the global three-check cap are never exceeded',()=>{
  reserveRemoteLease(stores,{now,leaseToken:token});
  assert.deepEqual(remoteCapacity(stores,{now,activeLocalContainers:2}),{remote:1,local:2,total:3,remaining:0});
  assert.throws(()=>reserveRemoteLease(stores,{now,leaseToken:'c'.repeat(43)}),error=>error instanceof LeaseError&&error.code==='REMOTE_ACTIVE');
- const fresh=makeStores([makeJob()]);assert.throws(()=>reserveRemoteLease(fresh,{now,activeLocalContainers:3,leaseToken:token}),error=>error.code==='LOCAL_ACTIVE');
+ const fresh=makeStores([makeJob()]);assert.throws(()=>reserveRemoteLease(fresh,{now,activeLocalContainers:3,leaseToken:token}),error=>error.code==='GLOBAL_CAP');
 });
 
 test('wrong token is rejected without changing the lease, and completed tokens cannot replay',()=>{

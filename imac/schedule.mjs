@@ -14,7 +14,7 @@ export function initialState(now, total) {
   // Migration starts from now, without replaying jobs already handled by the old runner.
   return { version: 2, dailyTotal: total, lastEnqueuedAt: slotAt(now), jobs: {}, missedSlots: 0 };
 }
-export function advance(state, now, total) {
+export function advance(state, now, total, idPrefix = '') {
   if (state.version !== 2 || !validTotal(total) || !validTotal(state.dailyTotal) || !Number.isFinite(state.lastEnqueuedAt)) throw new Error('invalid scheduler state');
   const end = slotAt(now), floor = now - LOOKBACK_MS;
   let start = state.lastEnqueuedAt + SLOT_MS;
@@ -26,7 +26,7 @@ export function advance(state, now, total) {
   for (let ms = start; ms <= end; ms += SLOT_MS) {
     const count = countForSlot(ms, state.dailyTotal);
     for (let i = 0; i < count; i++) {
-      const id = `v2-${new Date(ms).toISOString().replace(/[-:]/g, '').slice(0, 13)}-${i}`;
+      const id = `${idPrefix}v2-${new Date(ms).toISOString().replace(/[-:]/g, '').slice(0, 13)}-${i}`;
       state.jobs[id] ??= { id, slot: ms, index: i, plannedTotal: state.dailyTotal, status: 'pending' };
     }
   }

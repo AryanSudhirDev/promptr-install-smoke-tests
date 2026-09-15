@@ -9,7 +9,7 @@ const source = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 assert.ok(source, 'macbook page inline script exists');
 const REPO = 'AryanSudhirDev/promptr-install-smoke-tests';
 const API = 'https://promptr-qa-dashboard.vercel.app/api/macbook';
-const DEFAULTS = { enabled: true, minBatteryPercent: 50, pollIntervalMinutes: 10, requireAC: true, requireHome: true };
+const DEFAULTS = { enabled: true, minBatteryPercent: 50, pollIntervalMinutes: 10, requireAC: true, requireHome: true, promptrDailyTotal: 1400, cognispecDailyTotal: 1189 };
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const json = value => ({ ok: true, status: 200, json: async () => structuredClone(value) });
 
@@ -128,7 +128,7 @@ test('save sends the full five-field schema, disables inputs while saving, and c
   assert.equal(d.el('save-btn').disabled, true);
   hold.resolve(); await saving;
   const posted = JSON.parse(d.calls.find(c => c.kind === 'post').options.body);
-  assert.deepEqual(posted, { settings: { enabled: true, minBatteryPercent: 60, pollIntervalMinutes: 10, requireAC: true, requireHome: true } });
+  assert.deepEqual(posted, { settings: { enabled: true, minBatteryPercent: 60, pollIntervalMinutes: 10, requireAC: true, requireHome: true, promptrDailyTotal: 1400, cognispecDailyTotal: 1189 } });
   assert.match(d.el('save-msg').textContent, /Accepted/);
   assert.equal(d.el('enabled').disabled, false);
 });
@@ -140,7 +140,7 @@ test('client-side validation rejects out-of-range values before any request is s
     d.el(id).value = value; d.el(id).dispatch('input');
     await submit(d);
     assert.equal(d.calls.filter(c => c.kind === 'post').length, before, id + '=' + value + ' must not POST');
-    assert.match(d.el('save-msg').textContent, /Enter a whole number/);
+    assert.match(d.el('save-msg').textContent, /Enter valid whole-number/);
   }
 });
 

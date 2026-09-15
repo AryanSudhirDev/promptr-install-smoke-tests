@@ -3,5 +3,7 @@
   "minBatteryPercent": 50,
   "pollIntervalMinutes": 10,
   "requireAC": true,
-  "requireHome": true
+  "requireHome": true,
+  "promptrDailyTotal": 1400,
+  "cognispecDailyTotal": 1189
 }

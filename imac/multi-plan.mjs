@@ -3,8 +3,8 @@ export const TARGETS={
  promptr:{id:'aryansudhir.promptr',suite:'extended-suite.cjs',marker:'PROMPTR_EXTENDED_SMOKE_TEST_PASSED',file:'scheduler-v2.json'},
  cognispec:{id:'aryansudhir.cognispec',suite:'cognispec-suite.cjs',marker:'COGNISPEC_EXTENDED_SMOKE_TEST_PASSED',file:'scheduler-cognispec-v2.json'},
 };
-export function advanceTarget(state,now,key,total){
- if(!TARGETS[key]||!(validTotal(total)||key==='cognispec'&&total===0))throw new Error('Invalid QA target or daily rate');
+export function advanceTarget(state,now,key,total,idPrefix=''){
+ if(!TARGETS[key]||!(validTotal(total)||total===0))throw new Error('Invalid QA target or daily rate');
  if(!state){if(total===0)return null;state=initialState(key==='cognispec'?now-SLOT_MS:now,total);}
  if(total===0){
   state.lastEnqueuedAt=slotAt(now);
@@ -13,7 +13,7 @@ export function advanceTarget(state,now,key,total){
  }
  // schedule.mjs remains the same single-target allocator. Namespace its generated IDs before merging.
  const previous=state.jobs;const allocation={...state,jobs:{}};
- advance(allocation,now,total);
+ advance(allocation,now,total,idPrefix);
  for(const job of Object.values(allocation.jobs)){
   if(key==='cognispec')job.id='cognispec-'+job.id;
   job.target=key;previous[job.id]??=job;

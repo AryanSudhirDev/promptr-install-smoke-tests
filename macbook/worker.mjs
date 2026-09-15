@@ -21,14 +21,14 @@ async function cleanupAll(){
  if(ids.length)await run(DOCKER,['rm','-f',...ids],{timeout:20000});cleanupVerified=true;
 }
 async function complete(request,{deadline=Date.now()+120000}={}){
- while(Date.now()<deadline){try{return await broker('complete',request,{...lastSettings,requireHome:false},{timeout:20000});}catch(e){if(!['BUSY','LOCAL_ACTIVE'].includes(e.code))throw e;await sleep(3000);}}
+ while(Date.now()<deadline){try{return await broker('macbook-complete',request,{...lastSettings,requireHome:false},{timeout:20000});}catch(e){if(!['BUSY','LOCAL_ACTIVE'].includes(e.code))throw e;await sleep(3000);}}
  throw new Error('Broker busy; completion saved for recovery');
 }
 async function recover(){
  // Worker PID mutex excludes another live worker. Remove only our containers before
  // acknowledging abandoned leases, including leases lost before their bundle arrived.
  await cleanupAll();let state;
- for(let i=0;i<45;i++){try{state=await broker('recover',null,{...lastSettings,requireHome:false},{timeout:15000});break;}catch(e){if(e.code!=='BUSY')throw e;await sleep(3000);}}
+ for(let i=0;i<45;i++){try{state=await broker('macbook-recover',null,{...lastSettings,requireHome:false},{timeout:15000});break;}catch(e){if(e.code!=='BUSY')throw e;await sleep(3000);}}
  if(!state)throw new Error('Could not reconcile prior MacBook work');
  for(const lease of state.leases||[])await complete({jobId:lease.jobId,leaseToken:lease.leaseToken,status:'failed',seconds:0,reports:{},error:'Recovered after a MacBook interruption; owned containers removed',cleanupConfirmed:true});
  // Accepted or expired prior results are never replayed as new QA jobs.
@@ -62,8 +62,10 @@ try{
  if(!await allowed())throw new Error('Not eligible');const image=await ensureImage(abort.signal);await recover();prune();workerStatus({phase:'waiting_for_work',detail:'Eligible; waiting for an already-planned shared check.'});
  while(!abort.signal.aborted){
   if(!await allowed())break;
-  const peek=await broker('peek',null,lastSettings,{signal:abort.signal,timeout:15000});if(!peek.available){await sleep(15000,null,{signal:abort.signal});continue;}
-  const start=Date.now();let bundle;try{bundle=await broker('claim',null,lastSettings,{signal:abort.signal,timeout:120000});}catch(e){if(['BUSY','LOCAL_ACTIVE','REMOTE_ACTIVE'].includes(e.code)){await sleep(5000,null,{signal:abort.signal});continue;}throw e;}
+  const plan={promptrDailyTotal:lastSettings.promptrDailyTotal,cognispecDailyTotal:lastSettings.cognispecDailyTotal};
+  if(plan.promptrDailyTotal===0&&plan.cognispecDailyTotal===0){workerStatus({phase:'paused_plan',detail:'Both independently planned MacBook targets are set to 0/day.'});await sleep(15000,null,{signal:abort.signal});continue;}
+  const peek=await broker('macbook-peek',{plan},lastSettings,{signal:abort.signal,timeout:15000});if(!peek.available){await sleep(15000,null,{signal:abort.signal});continue;}
+  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},lastSettings,{signal:abort.signal,timeout:120000});}catch(e){if(['BUSY','LOCAL_ACTIVE','REMOTE_ACTIVE'].includes(e.code)){await sleep(5000,null,{signal:abort.signal});continue;}throw e;}
   if(!bundle.claimed){await sleep(15000,null,{signal:abort.signal});continue;}
   await check(bundle,image,start);
  }
