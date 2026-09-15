@@ -4,7 +4,9 @@ import path from 'node:path';
 import {advanceTarget,selectJobs} from './multi-plan.mjs';
 
 export const LEASE_MS=10*60*1000;
+// This is the iMac-local cap (and remains the legacy root cap), not a fleet cap.
 export const GLOBAL_CHECK_CAP=3;
+export const MACBOOK_REMOTE_LEASE_CAP=3;
 export const COMPLETE_INPUT_LIMIT=32*1024*1024;
 export const MAX_BUNDLE_BYTES=32*1024*1024;
 export const MAX_VSIX_BYTES=23*1024*1024;
@@ -55,14 +57,15 @@ export function expireRemoteLeases(stores,now=Date.now()){
  return expired;
 }
 
-export function remoteCapacity(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0}={}){
+export function remoteCapacity(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0,cap=GLOBAL_CHECK_CAP,includeLocalActivity=true}={}){
  if(!Number.isInteger(activeLocalContainers)||activeLocalContainers<0||!Number.isInteger(externalRemoteCount)||externalRemoteCount<0)throw new LeaseError('INVALID_ACTIVITY','Invalid local container count');
+ if(!Number.isInteger(cap)||cap<1)throw new LeaseError('INVALID_ACTIVITY','Invalid capacity limit');
  const remote=activeRemoteLeases(stores).length+externalRemoteCount;
  const ledgerLocal=ledgerLocalActivity(stores).length;
  // A running iMac check normally appears in both Docker and the ledger. Use the
  // larger observation so it occupies one fleet slot rather than being counted twice.
- const local=Math.max(activeLocalContainers,ledgerLocal);
- return {remote,local,total:remote+local,remaining:Math.max(0,GLOBAL_CHECK_CAP-remote-local)};
+ const local=includeLocalActivity?Math.max(activeLocalContainers,ledgerLocal):0;
+ return {remote,local,total:remote+local,remaining:Math.max(0,cap-remote-local)};
 }
 
 export function reserveLocalJob(stores,jobId,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0}={}){
@@ -83,14 +86,15 @@ export function createLeaseToken(randomBytes=crypto.randomBytes){
  return token;
 }
 
-export function reserveRemoteLease(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0,leaseToken=createLeaseToken()}={}){
+export function reserveRemoteLease(stores,{now=Date.now(),activeLocalContainers=0,externalRemoteCount=0,leaseToken=createLeaseToken(),remoteLeaseCap=1,includeLocalActivity=true}={}){
  expireRemoteLeases(stores,now);
- const capacity=remoteCapacity(stores,{now,activeLocalContainers,externalRemoteCount});
- if(capacity.remote>0){
+ if(!Number.isInteger(remoteLeaseCap)||remoteLeaseCap<1)throw new LeaseError('INVALID_ACTIVITY','Invalid remote lease limit');
+ const capacity=remoteCapacity(stores,{now,activeLocalContainers,externalRemoteCount,cap:includeLocalActivity?GLOBAL_CHECK_CAP:remoteLeaseCap,includeLocalActivity});
+ if(capacity.remote>=remoteLeaseCap){
   const until=Math.min(...activeRemoteLeases(stores).map(({job})=>asTime(job.leaseUntil)).filter(Number.isFinite));
-  throw new LeaseError('REMOTE_ACTIVE','A MacBook lease is already active',{retryAfterMs:boundedRetryAfter(until-now)});
+  throw new LeaseError('REMOTE_ACTIVE','MacBook lease capacity is full',{retryAfterMs:boundedRetryAfter(until-now)});
  }
- if(capacity.total>=GLOBAL_CHECK_CAP||capacity.remaining<1)throw new LeaseError('GLOBAL_CAP','The shared three-check cap is full',{retryAfterMs:1000});
+ if(capacity.remaining<1)throw new LeaseError('GLOBAL_CAP','The three-check capacity is full',{retryAfterMs:1000});
  if(typeof leaseToken!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(leaseToken))throw new LeaseError('INVALID_TOKEN','Invalid lease token');
  const selected=selectJobs(stores,1)[0];
  if(!selected)return null;

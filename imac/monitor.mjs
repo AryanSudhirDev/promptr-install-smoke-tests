@@ -66,10 +66,6 @@ async function countActiveLocalContainers(){
  const r=await exec('docker',['ps','--format','{{.Names}}'],{timeout:10000});
  return r.stdout.split(/\r?\n/).filter(name=>name.startsWith('promptr-check-')).length;
 }
-function independentMacBookRemoteCount(){
- let n=0;for(const file of ['scheduler-v2.json','scheduler-cognispec-v2.json'])try{const state=JSON.parse(fs.readFileSync(path.join(here,'macbook-plan',file),'utf8'));for(const job of Object.values(state.jobs||{}))if(job.remoteHost==='macbook'&&['remote_started','remote_cleanup_pending'].includes(job.status))n++;}catch{}
- return n;
-}
 async function mutateLocalJob(jobId,mutate){
  return withStateLock(()=>{
   const fresh=loadStores();let selected;
@@ -112,7 +108,7 @@ function canStart(){
  return true;
 }
 const due=selectJobs(stores,maxPerRun),queue=[...due],results=[];
-console.log(`[monitor] ${new Date().toISOString()} rates=${JSON.stringify(totals)}/day pending=${pending()} batch=${due.length} local-concurrency=${Math.max(0,GLOBAL_CHECK_CAP-activeRemoteLeases(stores).length)} active-remote=${activeRemoteLeases(stores).length} shared-cap=${GLOBAL_CHECK_CAP}`);
+console.log(`[monitor] ${new Date().toISOString()} rates=${JSON.stringify(totals)}/day pending=${pending()} batch=${due.length} local-concurrency=${GLOBAL_CHECK_CAP} active-remote=${activeRemoteLeases(stores).length} local-cap=${GLOBAL_CHECK_CAP}`);
 const started=Date.now();
 const phase=()=>cleanupBlocked||limiterBlocked||diskPaused?'blocked':ratePaused?'cooldown':'idle';
 async function publish(currentPhase='running'){
@@ -129,7 +125,7 @@ async function reserveCandidate(candidate){
  const activeLocalContainers=await countActiveLocalContainers();
  return withStateLock(()=>{
   const fresh=loadStores(),expired=expireRemoteLeases(fresh,Date.now());
-  const reservation=reserveLocalJob(fresh,candidate.job.id,{now:Date.now(),activeLocalContainers,externalRemoteCount:independentMacBookRemoteCount()});
+  const reservation=reserveLocalJob(fresh,candidate.job.id,{now:Date.now(),activeLocalContainers});
   const changed=new Set(expired.map(({store})=>store));if(reservation.started)changed.add(reservation.store);
   for(const store of changed)persist(store);
   stores=fresh;return reservation;

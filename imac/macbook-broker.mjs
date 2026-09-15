@@ -8,7 +8,7 @@ import {validTotal} from './schedule.mjs';
 import {TARGETS,selectJobs} from './multi-plan.mjs';
 import registryModule from './registry-fetch.cjs';
 import {
- COMPLETE_INPUT_LIMIT,MAX_BUNDLE_BYTES,MAX_VSIX_BYTES,LeaseError,acquirePidLock,activeRemoteLeases,
+ COMPLETE_INPUT_LIMIT,MACBOOK_REMOTE_LEASE_CAP,MAX_BUNDLE_BYTES,MAX_VSIX_BYTES,LeaseError,acquirePidLock,activeRemoteLeases,
  advanceTargetWithRemoteFencing,applyFreshDownload,boundedRetryAfter,completeRemoteLease,createLeaseToken,
  expireRemoteLeases,failRemoteClaim,findLeasedJob,inspectPidLock,isActiveRemoteLease,ledgerLocalActivity,
  outstandingRemoteLeases,remoteCapacity,reserveRemoteLease,
@@ -127,14 +127,14 @@ function bundleFor({reservation,artifact}){
  return bundle;
 }
 
-export async function peekOperation({root=here,now=Date.now(),isAlive,idPrefix=''}={}){
+export async function peekOperation({root=here,now=Date.now(),isAlive,idPrefix='',remoteLeaseCap=1,includeLocalActivity=true}={}){
  const lockState=inspectPidLock(path.join(root,'.monitor-v2.lock'),{isAlive});
  if(lockState.state==='live')return {ok:true,operation:'peek',busy:true,available:false,retryAfterMs:250};
  if(lockState.state==='invalid')throw new LeaseError('INVALID_LOCK','The monitor lock contains an invalid PID; manual inspection is required');
  const stores=loadStores(root,{now,advance:true,idPrefix});expireRemoteLeases(stores,now); // Memory-only: peek never persists scheduler advancement or expiration.
  const remote=activeRemoteLeases(stores),localLedger=ledgerLocalActivity(stores),selected=selectJobs(stores,1)[0];
- const capacity=remoteCapacity(stores),available=Boolean(selected&&remote.length===0&&capacity.remaining>0);
- const retryAfterMs=remote.length?boundedRetryAfter(Date.parse(remote[0].job.leaseUntil)-now):selected?250:1000;
+ const capacity=remoteCapacity(stores,{cap:includeLocalActivity?undefined:remoteLeaseCap,includeLocalActivity}),available=Boolean(selected&&remote.length<remoteLeaseCap&&capacity.remaining>0);
+ const retryAfterMs=remote.length>=remoteLeaseCap?boundedRetryAfter(Date.parse(remote[0].job.leaseUntil)-now):selected?250:1000;
  return {ok:true,operation:'peek',busy:false,staleLock:lockState.state==='stale',available,retryAfterMs,activeRemoteLeases:remote.length,remoteCleanupPending:remote.filter(({job})=>job.status==='remote_cleanup_pending').length,activeLocalLedgerJobs:localLedger.length,remainingCapacity:capacity.remaining,pending:selectJobs(stores,Infinity).length,...(selected?{next:{jobId:selected.job.id,target:selected.store.key,targetId:selected.store.id}}:{})};
 }
 
@@ -144,12 +144,12 @@ function matchingReservation(stores,reservation){
  return {...current,leaseToken:reservation.leaseToken,leaseUntil:current.job.leaseUntil};
 }
 
-export async function claimOperation({root=here,limiterRoot=root,now=Date.now(),isAlive,exec=boundedExec,registryFetchFactory=createRegistryFetch,clock=()=>Date.now(),token,idPrefix='',externalRemoteCount=0}={}){
+export async function claimOperation({root=here,limiterRoot=root,now=Date.now(),isAlive,exec=boundedExec,registryFetchFactory=createRegistryFetch,clock=()=>Date.now(),token,idPrefix='',externalRemoteCount=0,remoteLeaseCap=1,includeLocalActivity=true}={}){
  const activeLocalContainers=await countActiveLocalContainers(exec),lockPath=path.join(root,'.monitor-v2.lock');
  let reservation,release=await acquireStateLock(lockPath,{isAlive});
  try{
   const stores=loadStores(root,{now,advance:true,idPrefix});
-  reservation=reserveRemoteLease(stores,{now,activeLocalContainers,externalRemoteCount,leaseToken:token??createLeaseToken()});
+  reservation=reserveRemoteLease(stores,{now,activeLocalContainers,externalRemoteCount,leaseToken:token??createLeaseToken(),remoteLeaseCap,includeLocalActivity});
   persistStores(stores); // Scheduler advancement, expiry fencing, and reservation are one locked write phase.
  }finally{release();}
  if(!reservation)return {ok:true,operation:'claim',claimed:false,retryAfterMs:1000};
@@ -222,12 +222,11 @@ export async function readBoundedStdin(stream=process.stdin,limit=COMPLETE_INPUT
 
 export async function macbookPlanPeekOperation(plan,options={}){
  const root=options.planRoot??macbookPlanRoot;prepareMacBookPlan(plan,root);
- return peekOperation({...options,root,idPrefix:'macbook-'});
+ return peekOperation({...options,root,idPrefix:'macbook-',remoteLeaseCap:MACBOOK_REMOTE_LEASE_CAP,includeLocalActivity:false});
 }
 export async function macbookPlanClaimOperation(plan,options={}){
  const root=options.planRoot??macbookPlanRoot;prepareMacBookPlan(plan,root);
- const iMacRemote=options.externalRemoteCount??activeRemoteLeases(loadStores(here)).length;
- return claimOperation({...options,root,limiterRoot:options.limiterRoot??here,idPrefix:'macbook-',externalRemoteCount:iMacRemote});
+ return claimOperation({...options,root,limiterRoot:options.limiterRoot??here,idPrefix:'macbook-',externalRemoteCount:0,remoteLeaseCap:MACBOOK_REMOTE_LEASE_CAP,includeLocalActivity:false});
 }
 export async function macbookPlanRecoverOperation(options={}){
  const root=options.planRoot??macbookPlanRoot;if(!fs.existsSync(path.join(root,'config.json')))return {ok:true,operation:'recover',leases:[]};
