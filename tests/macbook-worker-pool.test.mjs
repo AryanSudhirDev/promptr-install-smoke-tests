@@ -5,6 +5,18 @@ import {
  MAX_MACBOOK_WORKERS,macbookContainerName,poolStatusSnapshot,runWorkerLanes,
 } from '../macbook/worker.mjs';
 
+test('overnight can start six lanes without changing the daytime default',async()=>{
+ assert.equal(MAX_MACBOOK_WORKERS,3);
+ let active=0,peak=0,release;
+ const allStarted=new Promise(resolve=>{release=resolve;});
+ const results=await runWorkerLanes(async lane=>{
+  active++;peak=Math.max(peak,active);
+  if(active===6)release();
+  await allStarted;active--;return lane;
+ },{count:6});
+ assert.equal(peak,6);assert.equal(results.length,6);
+});
+
 test('MacBook worker starts exactly three concurrent lanes',async()=>{
  assert.equal(MAX_MACBOOK_WORKERS,3);
  let active=0,peak=0,release;
@@ -44,6 +56,14 @@ test('lane status reports active count without exposing lease tokens',()=>{
 test('container names are job-local and reject unsafe identities',()=>{
  assert.equal(macbookContainerName('macbook-v2-20260915T0100-2'),'macbook-check-macbook-v2-20260915T0100-2');
  for(const bad of ['', '../other', 'job with spaces', 'x'.repeat(161)])assert.throws(()=>macbookContainerName(bad),/Invalid leased job identity/);
+});
+
+test('broker claim and recover retries INTERNAL instead of stopping the worker',()=>{
+ const source=fs.readFileSync(new URL('../macbook/worker.mjs',import.meta.url),'utf8');
+ assert.match(source,/FATAL_BROKER/);assert.match(source,/retriableBroker/);
+ assert.match(source,/Broker peek failed/);assert.match(source,/Broker claim failed/);
+ const recoverSource=source.slice(source.indexOf('async function recover()'),source.indexOf('function readReports('));
+ assert.match(recoverSource,/retriableBroker/);assert.doesNotMatch(recoverSource,/e\.code!=='BUSY'/);
 });
 
 test('normal checks clean only their lane container while recovery and final abort retain global cleanup',()=>{

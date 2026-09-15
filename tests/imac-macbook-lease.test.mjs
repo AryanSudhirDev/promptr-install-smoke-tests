@@ -170,21 +170,23 @@ test('PID lock returns busy for live holders and never deletes invalid PID locks
 });
 
 
-test('MacBook plan has an independent three-lease cap and cleanup-pending leases remain counted',async t=>{
+test('MacBook plan has an independent lease cap and cleanup-pending leases remain counted',async t=>{
  const root=fs.mkdtempSync(path.join(process.env.QA_TEST_TMP||os.tmpdir(),'macbook-independent-cap-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const planRoot=path.join(root,'macbook-plan'),plan={promptrDailyTotal:1400,cognispecDailyTotal:0};
  fs.mkdirSync(path.join(root,'registry-limit'),{recursive:true});fs.writeFileSync(path.join(root,'registry-limit','state.json'),JSON.stringify({version:1,nextAllowedAt:0,cooldownUntil:0}));
- const jobs=[0,1,2,3].map(index=>makeJob(`macbook-v2-20260914T1702-${index}`,'pending',{index}));
+ const jobs=Array.from({length:MACBOOK_REMOTE_LEASE_CAP+1},(_,index)=>makeJob(`macbook-v2-20260914T1702-${index}`,'pending',{index}));
  fs.mkdirSync(planRoot,{recursive:true});fs.writeFileSync(path.join(planRoot,'scheduler-v2.json'),JSON.stringify(makeStores(jobs)[0].state));
  const bytes=Buffer.from('independent cap fixture'),hash=crypto.createHash('sha256').update(bytes).digest('hex');
  const registryFetchFactory=()=>async url=>url.includes('/api/')?new Response(JSON.stringify({version:'1.5.6',files:{sha256:'https://open-vsx.org/hash',download:'https://open-vsx.org/download'}})):url.endsWith('/hash')?new Response(hash):new Response(bytes);
  const options={planRoot,limiterRoot:root,now,externalRemoteCount:99,exec:async()=>({stdout:'promptr-check-imac-a\npromptr-check-imac-b\npromptr-check-imac-c\n',stderr:''}),registryFetchFactory,clock:()=>now+1};
- const first=await macbookPlanClaimOperation(plan,{...options,token:'a'.repeat(43)});
+ const tokens=Array.from({length:MACBOOK_REMOTE_LEASE_CAP+1},(_,index)=>String.fromCharCode(97+index).repeat(43));
+ const first=await macbookPlanClaimOperation(plan,{...options,token:tokens[0]});
  const ledger=path.join(planRoot,'scheduler-v2.json'),state=JSON.parse(fs.readFileSync(ledger,'utf8'));
  state.jobs[first.jobId].status='remote_cleanup_pending';fs.writeFileSync(ledger,JSON.stringify(state));
- const second=await macbookPlanClaimOperation(plan,{...options,token:'b'.repeat(43)}),third=await macbookPlanClaimOperation(plan,{...options,token:'c'.repeat(43)});
- assert.equal(first.claimed,true);assert.equal(second.claimed,true);assert.equal(third.claimed,true);
+ const claimed=[first];
+ for(let i=1;i<MACBOOK_REMOTE_LEASE_CAP;i++)claimed.push(await macbookPlanClaimOperation(plan,{...options,token:tokens[i]}));
+ assert.ok(claimed.every(result=>result.claimed===true));
  const saved=JSON.parse(fs.readFileSync(ledger,'utf8')),leases=Object.values(saved.jobs).filter(job=>job.remoteHost==='macbook'&&['remote_started','remote_cleanup_pending'].includes(job.status));
  assert.equal(leases.length,MACBOOK_REMOTE_LEASE_CAP);assert.equal(leases.filter(job=>job.status==='remote_cleanup_pending').length,1);
- await assert.rejects(macbookPlanClaimOperation(plan,{...options,token:'d'.repeat(43)}),error=>error instanceof LeaseError&&error.code==='REMOTE_ACTIVE');
+ await assert.rejects(macbookPlanClaimOperation(plan,{...options,token:tokens[MACBOOK_REMOTE_LEASE_CAP]}),error=>error instanceof LeaseError&&error.code==='REMOTE_ACTIVE');
 });

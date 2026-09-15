@@ -4,15 +4,19 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {run} from './exec.mjs';
 import {ROOT,DOCKER,atomic,eligibility,workerStatus,broker} from './runtime.mjs';
 import {ensureImage} from './image.mjs';
+import {DAY_WORKERS,overnightClaimPlan,readOvernight,workerCount} from './overnight.mjs';
 import {fileURLToPath} from 'node:url';
 import {acquireLocalLock} from './pid-lock.mjs';
 
-export const MAX_MACBOOK_WORKERS=3;
+export const MAX_MACBOOK_WORKERS=DAY_WORKERS;
 const abort=new AbortController();let lastSettings=null;
 // Losing the race for a shared slot is ordinary contention, not a failure. The broker owns
 // claim serialization, so all lanes may peek and claim independently without duplicate jobs.
 const CONTENDED=new Set(['BUSY','LOCAL_ACTIVE','REMOTE_ACTIVE','GLOBAL_CAP']);
+const FATAL_BROKER=new Set(['INVALID_PLAN','CONFIG_INVALID','CONFIG_UNAVAILABLE','INVALID_OPERATION']);
+const FINISHED_LEASE=new Set(['ILLEGAL_TRANSITION','UNKNOWN_JOB']);
 const retryDelay=ms=>Number.isFinite(ms)?Math.min(15000,Math.max(2000,ms)):5000;
+const retriableBroker=error=>!FATAL_BROKER.has(error?.code);
 
 export function macbookContainerName(jobId){
  if(!/^[A-Za-z0-9_-]{1,160}$/.test(jobId))throw new Error('Invalid leased job identity');
@@ -54,13 +58,13 @@ async function cleanupContainer(name){
  if(ids.length)await run(DOCKER,['rm','-f',...ids],{timeout:20000});
 }
 async function complete(request,{deadline=Date.now()+120000}={}){
- while(Date.now()<deadline){try{return await broker('macbook-complete',request,{...lastSettings,requireHome:false},{timeout:20000});}catch(e){if(!['BUSY','LOCAL_ACTIVE'].includes(e.code))throw e;await sleep(3000);}}
+ while(Date.now()<deadline){try{return await broker('macbook-complete',request,{...lastSettings,requireHome:false},{timeout:20000});}catch(e){if(FINISHED_LEASE.has(e.code))return {ok:true,skipped:e.code};if(!retriableBroker(e)||['WRONG_TOKEN','INVALID_REQUEST','CLEANUP_NOT_CONFIRMED'].includes(e.code))throw e;await sleep(3000);}}
  throw new Error('Broker busy; completion saved for recovery');
 }
 async function recover(){
  // The outer worker PID mutex excludes another live worker. Reconcile once before lanes start.
  await cleanupAll();let state;
- for(let i=0;i<45;i++){try{state=await broker('macbook-recover',null,{...lastSettings,requireHome:false},{timeout:15000});break;}catch(e){if(e.code!=='BUSY')throw e;await sleep(3000);}}
+ for(let i=0;i<45;i++){try{state=await broker('macbook-recover',null,{...lastSettings,requireHome:false},{timeout:15000});break;}catch(e){if(!retriableBroker(e)||i===44)throw e;await sleep(3000);}}
  if(!state)throw new Error('Could not reconcile prior MacBook work');
  for(const lease of state.leases||[])await complete({jobId:lease.jobId,leaseToken:lease.leaseToken,status:'failed',seconds:0,reports:{},error:'Recovered after a MacBook interruption; owned containers removed',cleanupConfirmed:true});
  // Accepted or expired prior results are never replayed as new QA jobs.
@@ -92,13 +96,27 @@ async function check(bundle,image,started,lane,poolStatus){
  }finally{poolStatus.finish(lane,finalStatus);}
 }
 function prune(){const jobs=path.join(ROOT,'jobs');if(!fs.existsSync(jobs))return;for(const name of fs.readdirSync(jobs)){const p=path.join(jobs,name),s=fs.lstatSync(p);if(s.isDirectory()&&!s.isSymbolicLink()&&Date.now()-s.mtimeMs>2*86400000)fs.rmSync(p,{recursive:true});}}
-async function laneLoop(lane,image,poolStatus){
+async function dockerMemoryBytes(){
+ try{return Number(JSON.parse((await run(DOCKER,['info','--format','{{json .}}'],{timeout:10000,signal:abort.signal})).stdout).MemTotal)||0;}catch{return 0;}
+}
+function desiredWorkers(memTotalBytes){
+ return workerCount({memTotalBytes,overnight:Boolean(readOvernight(ROOT))});
+}
+async function laneLoop(lane,image,poolStatus,memTotalBytes){
  while(!abort.signal.aborted){
   if(!await allowed())break;
-  const plan={promptrDailyTotal:lastSettings.promptrDailyTotal,cognispecDailyTotal:lastSettings.cognispecDailyTotal};
+  if(lane>desiredWorkers(memTotalBytes))break;
+  const overnight=readOvernight(ROOT);
+  const claimedPlan=overnightClaimPlan(lastSettings,{overnight,memTotalBytes});
+  const plan={promptrDailyTotal:claimedPlan.promptrDailyTotal,cognispecDailyTotal:claimedPlan.cognispecDailyTotal};
   if(plan.promptrDailyTotal===0&&plan.cognispecDailyTotal===0){poolStatus.report({phase:'paused_plan',detail:'Both independently planned MacBook targets are set to 0/day.'});await sleep(15000,null,{signal:abort.signal});continue;}
-  const peek=await broker('macbook-peek',{plan},lastSettings,{signal:abort.signal,timeout:15000});if(!peek.available){await sleep(15000,null,{signal:abort.signal});continue;}
-  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},lastSettings,{signal:abort.signal,timeout:120000});}catch(e){if(CONTENDED.has(e.code)){poolStatus.report({phase:'waiting_for_work',detail:'Shared fleet busy ('+e.message+'); retrying.'});await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;}throw e;}
+  let peek;try{peek=await broker('macbook-peek',{plan},lastSettings,{signal:abort.signal,timeout:15000});}catch(e){if(abort.signal.aborted||!retriableBroker(e))throw e;poolStatus.report({phase:'waiting_for_work',detail:'Broker peek failed ('+e.message+'); retrying.'});await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;}
+  if(!peek.available){await sleep(15000,null,{signal:abort.signal});continue;}
+  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},lastSettings,{signal:abort.signal,timeout:120000});}catch(e){
+   if(abort.signal.aborted||!retriableBroker(e))throw e;
+   poolStatus.report({phase:'waiting_for_work',detail:(CONTENDED.has(e.code)?'Shared fleet busy ('+e.message+')':'Broker claim failed ('+e.message+')')+'; retrying.'});
+   await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;
+  }
   if(!bundle.claimed){await sleep(15000,null,{signal:abort.signal});continue;}
   await check(bundle,image,start,lane,poolStatus);
  }
@@ -109,8 +127,10 @@ async function main(){
  const guard=setInterval(async()=>{if(checking||abort.signal.aborted)return;checking=true;try{if(!await allowed())abort.abort();}catch{abort.abort();}finally{checking=false;}},15000);
  const poolStatus=createPoolStatus();let finalCleanupError=null,laneFailure=null;
  try{
-  if(!await allowed())throw new Error('Not eligible');const image=await ensureImage(abort.signal);await recover();prune();poolStatus.report({phase:'waiting_for_work',detail:'Eligible; '+MAX_MACBOOK_WORKERS+' MacBook lanes waiting for independently planned checks.'});
-  await runWorkerLanes(lane=>laneLoop(lane,image,poolStatus),{onFailure:error=>{if(!abort.signal.aborted)laneFailure=error;abort.abort();}});
+  if(!await allowed())throw new Error('Not eligible');const image=await ensureImage(abort.signal);await recover();prune();
+  const memTotalBytes=await dockerMemoryBytes(),lanes=desiredWorkers(memTotalBytes);
+  poolStatus.report({phase:'waiting_for_work',detail:'Eligible; '+lanes+' MacBook lanes waiting for independently planned checks.'});
+  await runWorkerLanes(lane=>laneLoop(lane,image,poolStatus,memTotalBytes),{count:lanes,onFailure:error=>{if(!abort.signal.aborted)laneFailure=error;abort.abort();}});
   poolStatus.report({phase:'paused',detail:'Eligibility changed; stopping owned work.'});
  }catch(e){const failure=laneFailure||e,paused=abort.signal.aborted&&!laneFailure;poolStatus.report({phase:paused?'paused':'needs_attention',detail:paused?'Eligibility changed; stopping owned work.':failure.message});console.error('MacBook worker:',paused?'paused':failure.message);}
  finally{

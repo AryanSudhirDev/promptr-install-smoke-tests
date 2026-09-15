@@ -59,7 +59,7 @@ export function loadStores(root=here,{now=Date.now(),advance=false,idPrefix=''}=
  return Object.entries(TARGETS).map(([key,target])=>{
   const file=path.join(root,target.file);let state=null;
   if(fs.existsSync(file)){try{state=JSON.parse(fs.readFileSync(file,'utf8'));}catch{throw new LeaseError('STATE_INVALID',`${target.file} is invalid`);}}
-  if(advance)state=advanceTargetWithRemoteFencing(state,now,key,totals[key],idPrefix);
+  if(advance){try{state=advanceTargetWithRemoteFencing(state,now,key,totals[key],idPrefix);}catch(error){throw error instanceof LeaseError?error:new LeaseError('STATE_INVALID',error?.message||'Could not advance the MacBook scheduler');}}
   return {...target,key,total:totals[key],file,state};
  });
 }
@@ -235,7 +235,8 @@ export async function macbookPlanRecoverOperation(options={}){
 export async function macbookPlanCompleteOperation(request,options={}){return completeOperation(request,{...options,root:options.planRoot??macbookPlanRoot});}
 function errorResponse(operation,error){
  const known=error instanceof LeaseError;
- return {ok:false,operation,code:known?error.code:'INTERNAL',error:known?error.message:'Broker operation failed',...(Number.isFinite(error?.retryAfterMs)?{retryAfterMs:boundedRetryAfter(error.retryAfterMs)}:{})};
+ const message=known?error.message:String(error?.message||'Broker operation failed').slice(0,300);
+ return {ok:false,operation,code:known?error.code:'INTERNAL',error:message,...(Number.isFinite(error?.retryAfterMs)?{retryAfterMs:boundedRetryAfter(error.retryAfterMs)}:{})};
 }
 export async function dispatch(argv=process.argv.slice(2),options={}){
  const operation=argv[0];if(argv.length!==1||!['peek','claim','recover','complete','macbook-peek','macbook-claim','macbook-recover','macbook-complete'].includes(operation))throw new LeaseError('INVALID_OPERATION','Usage: macbook-broker.mjs peek|claim|recover|complete|macbook-peek|macbook-claim|macbook-recover|macbook-complete');

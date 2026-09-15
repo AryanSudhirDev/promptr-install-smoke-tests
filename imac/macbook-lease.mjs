@@ -6,7 +6,7 @@ import {advanceTarget,selectJobs} from './multi-plan.mjs';
 export const LEASE_MS=10*60*1000;
 // This is the iMac-local cap (and remains the legacy root cap), not a fleet cap.
 export const GLOBAL_CHECK_CAP=3;
-export const MACBOOK_REMOTE_LEASE_CAP=3;
+export const MACBOOK_REMOTE_LEASE_CAP=11;
 export const COMPLETE_INPUT_LIMIT=32*1024*1024;
 export const MAX_BUNDLE_BYTES=32*1024*1024;
 export const MAX_VSIX_BYTES=23*1024*1024;

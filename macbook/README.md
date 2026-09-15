@@ -7,8 +7,8 @@ A local macOS LaunchAgent supervises one native ARM64 Docker worker. It does not
 - Enabled, but eligible only while on AC power, battery **strictly above 50%**, and on the configured home LAN with a successful direct, pinned-key SSH check to the home iMac.
 - Dashboard configuration refresh every 10 minutes, editable from `docs/macbook.html` via `/api/macbook`.
 - A running worker rechecks eligibility every 15 seconds and before each job. Unknown power, inaccessible settings, an unverified required home connection, or less than 20 GiB free disk fails closed.
-- One delegated check at a time. Each container is capped at 2 CPUs, 2 GiB RAM, 512 processes and 512 MiB shared memory; container swap is disabled. The host can still compress/swap memory. This is not a validated throughput increase.
-- AC idle-sleep prevention applies only while enabled and the home requirement is satisfied. Display sleep, manual sleep, lid closure, logout and shutdown are not overridden. A login agent starts after login, not before FileVault unlock.
+- Daytime uses three concurrent checks. An 8-hour overnight window, started from the local status page, can use up to eleven 2 GiB containers if Docker is given 24 GiB plus 8 GiB swap. Overnight also switches the MacBook plan to a denser night rate so those extra slots have work. It writes Docker Desktop `MemoryMiB`/`SwapMiB` only when overnight starts and the VM is still short of 24 GiB, then restarts Docker once.
+- AC idle-sleep prevention applies only while enabled and the home requirement is satisfied. Display sleep, manual sleep, lid closure, logout and shutdown are not overridden. Leave the lid open overnight. A login agent starts after login, not before FileVault unlock.
 - Launchd restarts a crashed supervisor. Reused PIDs are checked against the expected script, and an existing live worker is never duplicated.
 
 ## Shared work and fresh artifact transfer
@@ -19,13 +19,13 @@ The coordinator performs one **new** retrieval of registry metadata, the SHA-256
 
 The native image contains VS Code, Node and the harness, **not a product VSIX**. The per-job transfer file is deleted after use. The container runs with networking disabled and performs the same checksum, manifest, install, lifecycle, activation, command, settings and UI assertions as the iMac suites. Reports explicitly identify `macbook-docker-arm64` and `imac-pinned-ssh-fresh-download-relay`.
 
-There is at most one outstanding MacBook lease and at most three shared QA checks. Expired leases remain fenced as `remote_cleanup_pending` until the MacBook confirms its owned containers are removed. A clock timeout alone never returns capacity. Recovery cleans only labeled MacBook QA containers and marks abandoned jobs failed, never requeues or recounts their downloads. A successful completion needs matching target/version/hash/variant, a clean-state installation report, all passing assertions, the target success marker, and confirmed container cleanup.
+The MacBook broker allows at most eleven outstanding MacBook leases, independent of the iMac’s three local containers. Daytime still starts three worker lanes; overnight may start up to eleven and uses a denser MacBook-only night plan so the extra slots are actually filled. Expired leases remain fenced as `remote_cleanup_pending` until the MacBook confirms its owned containers are removed. A clock timeout alone never returns capacity. Recovery cleans only labeled MacBook QA containers and marks abandoned jobs failed, never requeues or recounts their downloads. A successful completion needs matching target/version/hash/variant, a clean-state installation report, all passing assertions, the target success marker, and confirmed container cleanup.
 
 ## Dashboard security and privacy
 
 `api/macbook.js` uses the existing dashboard key for writes; GitHub credentials stay on Vercel. The public config contains only enabled, threshold, interval and policy booleans. Real battery level, home presence, SSH configuration, lease tokens and device status are never published.
 
-Private status: `http://127.0.0.1:47831/`, reachable only from this Mac. It is linked manually from the dashboard and is not fetched by the public page. The local service rejects foreign origins, unexpected Host headers and all writes. Runtime files live in a user-private `~/Library/Application Support/Promptr QA MacBook` directory.
+Private status: `http://127.0.0.1:47831/`, reachable only from this Mac. It is linked manually from the dashboard and is not fetched by the public page. The local service rejects foreign origins and unexpected Host headers. The only write is a loopback `POST /overnight` that marks an 8-hour high-concurrency window on this Mac. Runtime files live in a user-private `~/Library/Application Support/Promptr QA MacBook` directory.
 
 ## Installation and operation
 
