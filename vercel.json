@@ -7,6 +7,9 @@
   "functions": {
     "api/settings.js": {
       "maxDuration": 60
+    },
+    "api/macbook.js": {
+      "maxDuration": 60
     }
   },
   "headers": [

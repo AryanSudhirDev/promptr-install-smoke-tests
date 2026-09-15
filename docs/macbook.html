@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)" />
+<title>MacBook monitor settings</title>
+<style>
+:root{color-scheme:light dark;--bg:#0d1117;--surface:#151b23;--raised:#1b232e;--line:#2a3441;--text:#edf2f7;--dim:#a2afbf;--muted:#8493a6;--ok:#6ad3aa;--bad:#ff9c99;--warn:#e6b769;--accent:#9dafff;--shadow:0 5px 24px #00000013;--gap:18px}
+@media(prefers-color-scheme:light){:root{--bg:#f4f5f7;--surface:#fff;--raised:#f5f7fa;--line:#dee4eb;--text:#17252f;--dim:#526577;--muted:#596d7f;--ok:#18735b;--bad:#b12e38;--warn:#986115;--accent:#4a58ad;--shadow:0 4px 20px #17252f06}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text)}body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%;min-height:100dvh}button,input{font:inherit}button,a,summary,input,label{-webkit-tap-highlight-color:transparent}button,summary,label{cursor:pointer}button{color:var(--text);border:1px solid var(--line);background:var(--raised);border-radius:9px;min-height:40px;padding:8px 14px;font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s}button:hover:not(:disabled){background:var(--line);border-color:var(--muted)}button:disabled{opacity:.45;cursor:default}a{color:inherit;text-decoration:none}a:hover{text-decoration:underline}button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}h1,h2,h3,p,dl,dd{margin:0}h1,h2{letter-spacing:-.035em}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.muted{color:var(--dim)}
+.shell{width:100%;max-width:900px;margin:0 auto;padding:22px 30px 24px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}.brand{display:flex;align-items:center;gap:13px;min-width:0}.brand-mark{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--line);border-radius:11px;background:var(--surface);font-weight:700;color:var(--accent)}h1{font-size:22px;line-height:1.2;font-weight:650}.subtitle{font-size:12px;color:var(--dim);margin-top:4px}.header-actions{display:flex;align-items:center;gap:9px}
+.nav-link{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 14px;border:1px solid var(--line);border-radius:9px;background:var(--raised);color:var(--text);font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s}.nav-link:hover{background:var(--line);border-color:var(--muted);text-decoration:none}
+.access-menu{position:relative}.access-menu>summary{list-style:none;border:1px solid var(--line);padding:9px 12px;min-height:40px;display:flex;align-items:center;gap:8px;border-radius:9px;font-size:13px;color:var(--dim)}.access-menu>summary::-webkit-details-marker{display:none}.access-menu>summary::after{content:"⌄";font-size:14px}.access-menu[open]>summary{background:var(--raised);color:var(--text)}.access-popover{position:absolute;right:0;top:49px;z-index:25;width:330px;border:1px solid var(--line);border-radius:14px;padding:20px;background:var(--surface);box-shadow:0 16px 60px #0004}.popover-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.popover-heading h2{font-size:17px}.icon-button{min-width:40px;padding:6px;display:grid;place-items:center}.access-row{display:flex;gap:8px;margin:14px 0 8px}.access-row input{min-width:0;flex:1;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--text);padding:10px;font-size:16px}.hint{font-size:12px;line-height:1.6;color:var(--dim)}.clear-access{background:transparent;font-size:12px;min-height:36px;padding:5px 10px;margin-top:6px}
+.panel{border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:var(--surface);box-shadow:var(--shadow);margin-top:var(--gap)}.panel:first-of-type{margin-top:0}.panel h2{font-size:16px;font-weight:650;margin-bottom:6px}.panel>p.lead{font-size:12px;color:var(--dim);margin-bottom:14px}
+.field-row{padding:14px 0;border-top:1px solid var(--line)}.field-row:first-of-type{border-top:0;padding-top:4px}.field-row label{font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px}.field-row .hint{margin-top:6px}
+.toggle-row{display:flex;align-items:center;gap:12px;min-height:44px}.toggle-row input[type=checkbox]{width:20px;height:20px;flex:none;accent-color:var(--accent)}
+.num-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.num-field{position:relative;display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);height:42px;width:120px}.num-field input{width:100%;min-width:0;border:0;border-radius:8px;background:transparent;color:var(--text);font-size:15px;font-variant-numeric:tabular-nums;padding:8px 30px 8px 10px;height:100%;appearance:textfield;-moz-appearance:textfield}.num-field input::-webkit-inner-spin-button,.num-field input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.num-field>span{position:absolute;right:8px;font-size:10px;color:var(--dim);pointer-events:none}
+.warn-hint{color:var(--warn)}.warn-hint[hidden]{display:none}
+.save-row{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}.save-button{min-height:44px;padding:9px 18px}.msg{font-size:12px;line-height:1.5}.msg:empty{display:none}.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}.configured{font-size:11px;color:var(--dim);margin-top:10px}
+.health-link{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-weight:600}
+.page-footer{display:flex;justify-content:space-between;align-items:baseline;gap:14px;color:var(--muted);font-size:10px;margin-top:16px;flex-wrap:wrap}
+@media(max-width:639px){.shell{padding:max(16px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}.topbar{gap:12px}.header-actions{width:100%;display:flex;gap:10px;flex-wrap:wrap}.nav-link,.access-menu{flex:1;justify-content:center}.access-menu>summary{justify-content:center}.access-popover{position:fixed;top:auto;left:14px;right:14px;bottom:14px;width:auto;max-height:70dvh;overflow:auto}.panel{padding:16px}.toggle-row{min-height:44px}.num-field{height:44px}.save-button{width:100%}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+<header class="topbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><div><h1>MacBook monitor</h1><p class="subtitle">Runner settings · shared check pool</p></div></div>
+  <div class="header-actions">
+    <a class="nav-link" href="index.html">Extension monitor</a>
+    <details class="access-menu" id="tokbox"><summary>Dashboard access</summary><div class="access-popover">
+      <div class="popover-heading"><h2>Dashboard access</h2><button class="icon-button" aria-label="Close access settings" onclick="document.getElementById('tokbox').open=false">✕</button></div>
+      <p class="hint">Viewing is public. A dashboard key is needed only to change these settings.</p>
+      <div class="access-row"><input type="password" id="token" aria-label="Dashboard key" placeholder="Dashboard key" autocomplete="off"/><button onclick="saveToken()">Save key</button></div>
+      <div class="msg" role="status" aria-live="polite" id="tok-msg"></div>
+      <button class="clear-access" onclick="clearToken()">Remove saved key</button>
+      <p class="hint" id="tok-hint">Use a dashboard key, never a GitHub token. Stored in this browser when available, otherwise kept only for this page session. Same key as the extension monitor.</p>
+    </div></details>
+  </div>
+</header>
+<main>
+  <section class="panel" aria-labelledby="settings-title">
+    <h2 id="settings-title">Runner settings</h2>
+    <p class="lead">Configuration only. This does not show or control whether the MacBook is currently running &mdash; enabled is not the same as active.</p>
+    <form id="macbook-form">
+      <div class="field-row">
+        <div class="toggle-row"><input type="checkbox" id="enabled" aria-describedby="enabled-hint"/><label for="enabled">Enabled</label></div>
+        <p class="hint" id="enabled-hint">When off, this MacBook will not pick up scheduled checks. This reflects configuration only, not whether a check is currently running.</p>
+      </div>
+      <div class="field-row">
+        <div class="num-row">
+          <label for="minBattery">Minimum battery percent</label>
+          <div class="num-field"><input type="number" id="minBattery" min="10" max="95" step="1" inputmode="numeric" aria-describedby="battery-hint"/><span aria-hidden="true">%</span></div>
+        </div>
+        <p class="hint" id="battery-hint">Eligible to run only when battery is strictly above this percent (10 to 95).</p>
+      </div>
+      <div class="field-row">
+        <div class="num-row">
+          <label for="pollInterval">Poll interval</label>
+          <div class="num-field"><input type="number" id="pollInterval" min="1" max="60" step="1" inputmode="numeric" aria-describedby="interval-hint"/><span aria-hidden="true">min</span></div>
+        </div>
+        <p class="hint" id="interval-hint">The device checks for updated settings on this interval (1 to 60 minutes). A saved change propagates on its next poll, not immediately.</p>
+      </div>
+      <div class="field-row">
+        <div class="toggle-row"><input type="checkbox" id="requireAC" aria-describedby="ac-hint"/><label for="requireAC">Require AC power</label></div>
+        <p class="hint" id="ac-hint">Only run while plugged in.</p>
+        <p class="hint warn-hint" id="ac-warn" hidden>Turning this off lets checks run on battery power.</p>
+      </div>
+      <div class="field-row">
+        <div class="toggle-row"><input type="checkbox" id="requireHome" aria-describedby="home-hint"/><label for="requireHome">Require home network</label></div>
+        <p class="hint" id="home-hint">Only run while on the configured home network.</p>
+        <p class="hint warn-hint" id="home-warn" hidden>Turning this off lets checks run outside the home network.</p>
+      </div>
+      <div class="save-row">
+        <button type="submit" class="save-button" id="save-btn">Save settings</button>
+        <div class="msg" role="status" aria-live="polite" id="save-msg"></div>
+      </div>
+      <div class="configured" id="config-state">Loading current settings&hellip;</div>
+    </form>
+  </section>
+  <section class="panel" aria-labelledby="pool-title">
+    <h2 id="pool-title">Shared check pool</h2>
+    <p class="lead" id="pool-copy">This MacBook shares the same planned check pool as the iMac fleet. There is no separate public-download quota just for this device: at most one check is delegated to the MacBook at a time, and the fleet as a whole runs at most three checks concurrently. Raw daily check totals stay configured on the extension monitor page and are unchanged by this page.</p>
+  </section>
+  <section class="panel" aria-labelledby="health-title">
+    <h2 id="health-title">Device health</h2>
+    <p class="lead">Current battery, network, and run status are local to this Mac for privacy and are never published to GitHub or shown on this page. Enabled/disabled here is a setting, not a live status.</p>
+    <a class="health-link" href="http://127.0.0.1:47831/" target="_blank" rel="noopener">Open this Mac&rsquo;s local status</a>
+    <p class="hint">Only works when opened in a browser on the runner Mac itself. This page never fetches it automatically.</p>
+  </section>
+</main>
+<footer class="page-footer"><span>Configuration only. No live battery, network, presence, or run status is shown here.</span><span>Changes apply on the device&rsquo;s next poll.</span></footer>
+</div>
+<script>
+const REPO = 'AryanSudhirDev/promptr-install-smoke-tests';
+const API = 'https://promptr-qa-dashboard.vercel.app/api/macbook';
+const $ = id => document.getElementById(id);
+const KEY_STORE = 'promptr_qa_dash_key';
+const memory = new Map();
+let persistentStorage = true;
+const storage = {
+  get(key) { if (memory.has(key)) return memory.get(key); try { return localStorage.getItem(key); } catch { persistentStorage = false; return null; } },
+  set(key, value) { memory.set(key, value); try { localStorage.setItem(key, value); } catch { persistentStorage = false; } },
+  remove(key) { memory.set(key, null); try { localStorage.removeItem(key); } catch { persistentStorage = false; } }
+};
+const dashboardKey = () => { const key = storage.get(KEY_STORE); return typeof key === 'string' && !/^(github_pat_|gh[pousr]_)/i.test(key.trim()) ? key.trim() : ''; };
+function saveToken() {
+  const value = $('token').value.trim(); $('token').value = '';
+  if (/^(github_pat_|gh[pousr]_)/i.test(value)) { $('tok-msg').textContent = 'Use a dashboard key, not a GitHub token.'; return; }
+  if (!value) { $('tok-msg').textContent = 'No key entered.'; return; }
+  storage.set(KEY_STORE, value);
+  $('tok-msg').textContent = persistentStorage ? 'Dashboard key saved in this browser; verified only when you save a setting.' : 'Storage unavailable. Key kept in memory for this page session only.';
+  refreshTokenUi();
+}
+function clearToken() { storage.remove(KEY_STORE); $('token').value = ''; $('tok-msg').textContent = 'Dashboard key cleared.'; refreshTokenUi(); }
+function refreshTokenUi() {
+  const summary = $('tokbox').querySelector('summary');
+  summary.textContent = !serverWritable ? 'Read-only' : dashboardKey() ? 'Access · saved' : 'Access';
+  summary.setAttribute('title', !serverWritable ? 'Settings service unavailable or read-only; writes disabled' : dashboardKey() ? 'Dashboard key saved in this browser; open to change or remove' : 'Add a dashboard key to change these settings');
+  $('save-btn').disabled = saving || !serverWritable;
+}
+async function request(url, options = {}, kind = 'json') {
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const r = await fetch(url, { ...options, signal: controller.signal, cache: 'no-store', credentials: 'omit', redirect: 'error' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r[kind]();
+  } catch (e) { if (e.name === 'AbortError') throw new Error('request timed out'); throw e; }
+  finally { clearTimeout(timeout); }
+}
+let serverWritable = false, saving = false, settings = null, pending = null, dirty = false;
+const isBool = v => typeof v === 'boolean';
+const isIntInRange = (v, min, max) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+function validateSettings(s) {
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+  if (!isBool(s.enabled) || !isIntInRange(s.minBatteryPercent, 10, 95) || !isIntInRange(s.pollIntervalMinutes, 1, 60) || !isBool(s.requireAC) || !isBool(s.requireHome)) return null;
+  return { enabled: s.enabled, minBatteryPercent: s.minBatteryPercent, pollIntervalMinutes: s.pollIntervalMinutes, requireAC: s.requireAC, requireHome: s.requireHome };
+}
+function readForm() {
+  return {
+    enabled: $('enabled').checked,
+    minBatteryPercent: Number($('minBattery').value),
+    pollIntervalMinutes: Number($('pollInterval').value),
+    requireAC: $('requireAC').checked,
+    requireHome: $('requireHome').checked,
+  };
+}
+function renderForm() {
+  if (!dirty && !saving && settings) {
+    $('enabled').checked = settings.enabled;
+    $('minBattery').value = settings.minBatteryPercent;
+    $('pollInterval').value = settings.pollIntervalMinutes;
+    $('requireAC').checked = settings.requireAC;
+    $('requireHome').checked = settings.requireHome;
+  }
+  for (const id of ['enabled', 'minBattery', 'pollInterval', 'requireAC', 'requireHome']) $(id).disabled = saving;
+  $('ac-warn').hidden = $('requireAC').checked;
+  $('home-warn').hidden = $('requireHome').checked;
+  $('config-state').textContent = !settings
+    ? 'Current settings unavailable. Unable to read the stored configuration.'
+    : 'Configured: enabled=' + settings.enabled + ', battery>' + settings.minBatteryPercent + '%, poll every ' + settings.pollIntervalMinutes + ' min, requireAC=' + settings.requireAC + ', requireHome=' + settings.requireHome
+      + (pending ? ' (accepted, awaiting server confirmation)' : ' (server setting)');
+  refreshTokenUi();
+}
+for (const id of ['enabled', 'minBattery', 'pollInterval', 'requireAC', 'requireHome']) $(id).addEventListener('input', () => { dirty = true; });
+async function load() {
+  let readError = null;
+  try {
+    const j = await request(API);
+    if (!j || j.repo !== REPO || typeof j.writable !== 'boolean') throw new Error('unexpected settings service');
+    serverWritable = j.writable;
+    if (!saving) {
+      const value = validateSettings(j.settings);
+      if (pending) {
+        if (value && JSON.stringify(value) === JSON.stringify(pending)) { $('save-msg').className = 'msg ok'; $('save-msg').textContent = 'Saved and confirmed.'; pending = null; }
+        else if (value) { $('save-msg').className = 'msg'; $('save-msg').textContent = 'Fresh server setting differs from your last save (changed elsewhere).'; pending = null; }
+      }
+      if (value) settings = value;
+    }
+  } catch (e) {
+    serverWritable = false;
+    readError = e;
+  }
+  renderForm();
+  if (readError) $('config-state').textContent = 'Could not read current settings (' + readError.message + '). Refresh to retry.';
+}
+async function submit(event) {
+  event.preventDefault();
+  if (saving) return;
+  if (!serverWritable) { $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Settings service unavailable. Refresh to retry; no fallback writes are allowed.'; return; }
+  const key = dashboardKey();
+  if (!key) { $('tokbox').open = true; $('token').focus(); $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter your dashboard key in Access to change these settings.'; return; }
+  const next = readForm(), valid = validateSettings(next);
+  if (!valid) { $('save-msg').className = 'msg bad'; $('save-msg').textContent = 'Enter a whole number battery percent from 10 to 95 and a poll interval from 1 to 60 minutes.'; return; }
+  saving = true; renderForm(); $('save-msg').className = 'msg'; $('save-msg').textContent = 'Saving…';
+  try {
+    const j = await request(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-dash-key': key }, body: JSON.stringify({ settings: valid }) });
+    if (j?.ok !== true || !validateSettings(j.settings) || JSON.stringify(validateSettings(j.settings)) !== JSON.stringify(valid)) throw new Error('unexpected save response');
+    settings = valid; pending = valid; dirty = false;
+    $('save-msg').className = 'msg ok'; $('save-msg').textContent = 'Accepted. Applies on the device\u2019s next poll; awaiting a fresh server read to confirm.';
+  } catch (e) {
+    $('save-msg').className = 'msg bad';
+    $('save-msg').textContent = /HTTP 401|HTTP 403/.test(e.message) ? 'Dashboard key rejected or writes forbidden.' : 'Save not confirmed (' + e.message + '). Refresh before retrying; the server may have accepted it.';
+  } finally { saving = false; renderForm(); }
+}
+$('macbook-form').addEventListener('submit', submit);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('tokbox').open) { $('tokbox').open = false; $('tokbox').querySelector('summary').focus(); } });
+refreshTokenUi();
+load();
+</script>
+</body>
+</html>
