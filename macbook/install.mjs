@@ -1,0 +1,17 @@
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {run} from './exec.mjs';
+const source=fileURLToPath(new URL('../',import.meta.url)),root=path.join(process.env.HOME,'Library/Application Support/Promptr QA MacBook');
+const args=process.argv.slice(2),options={};for(let i=0;i<args.length;i+=2){if(!args[i]?.startsWith('--')||!args[i+1])throw new Error('Expected named configuration arguments');options[args[i].slice(2)]=args[i+1];}
+const required=['home-host','home-subnet','home-key-alias','ssh-alias','remote-host','broker-path','remote-node'];for(const key of required)if(!options[key])throw new Error('Missing --'+key);
+fs.mkdirSync(root,{recursive:true,mode:0o700});fs.chmodSync(root,0o700);
+const local={homeHost:options['home-host'],homeSubnet:options['home-subnet'],homeHostKeyAlias:options['home-key-alias'],sshAlias:options['ssh-alias'],remoteHost:options['remote-host'],brokerPath:options['broker-path'],remoteNode:options['remote-node']};fs.writeFileSync(path.join(root,'local.json'),JSON.stringify(local,null,2)+'\n',{mode:0o600});
+const runtime=path.join(root,'runtime');fs.mkdirSync(runtime,{recursive:true,mode:0o700});
+for(const relative of ['macbook','helper','package.json','package-lock.json'])fs.cpSync(path.join(source,relative),path.join(runtime,relative),{recursive:true});
+fs.mkdirSync(path.join(runtime,'imac'),{recursive:true});for(const name of fs.readdirSync(path.join(source,'imac')))if(name.endsWith('.cjs'))fs.copyFileSync(path.join(source,'imac',name),path.join(runtime,'imac',name));
+const xml=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+const label='com.promptr.qa.macbook',plist=path.join(process.env.HOME,'Library/LaunchAgents',label+'.plist');fs.mkdirSync(path.dirname(plist),{recursive:true});
+fs.writeFileSync(plist,`<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(fs.existsSync('/opt/homebrew/bin/node')?'/opt/homebrew/bin/node':process.execPath)}</string><string>${xml(path.join(runtime,'macbook/supervisor.mjs'))}</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>30</integer><key>ProcessType</key><string>Background</string><key>Nice</key><integer>10</integer><key>LowPriorityIO</key><true/><key>Umask</key><integer>63</integer><key>EnvironmentVariables</key><dict><key>HOME</key><string>${xml(process.env.HOME)}</string><key>MACBOOK_QA_HOME</key><string>${xml(root)}</string><key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict><key>StandardOutPath</key><string>${xml(path.join(root,'supervisor.log'))}</string><key>StandardErrorPath</key><string>${xml(path.join(root,'supervisor-error.log'))}</string></dict></plist>\n`,{mode:0o600});
+await run('/usr/bin/plutil',['-lint',plist]);const domain='gui/'+process.getuid();
+if(options.load==='false'){console.log('Service files prepared and plist validated. Load the login agent from your own Terminal.');process.exit(0);}
+try{await run('/bin/launchctl',['bootout',domain+'/'+label],{timeout:30000});}catch{}
+await run('/bin/launchctl',['bootstrap',domain,plist],{timeout:30000});
+console.log('MacBook login agent installed. Private status: http://127.0.0.1:47831/');

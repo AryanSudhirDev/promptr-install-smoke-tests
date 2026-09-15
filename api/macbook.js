@@ -79,7 +79,8 @@ export default async function handler(req, res) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const cur = await gh(`/contents/${CONFIG_PATH}`);
       let config; try { config = JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8')); } catch { config = null; }
-      if (!config || typeof config !== 'object' || Array.isArray(config)) config = {};
+      if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('invalid stored config');
+      if (FIELDS.every(field => config[field] === next[field])) return res.status(200).json({ ok: true, settings: next });
       // Preserve any unrelated fields that may exist alongside the five known settings.
       const merged = { ...config, ...next };
       try {

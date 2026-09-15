@@ -118,3 +118,11 @@ test('OPTIONS never requires a key and rejects disallowed origins even for prefl
   const rejected = await invoke('OPTIONS', null, { origin: 'https://evil.example' });
   assert.equal(rejected.code, 403);
 });
+
+test('unchanged saves avoid empty commits and malformed stored configuration is not overwritten', async () => {
+  let writes=0;
+  globalThis.fetch=async(url,init)=>{if(init.method==='PUT')writes++;return new Response(JSON.stringify({sha:'fixture',content:Buffer.from(JSON.stringify(DEFAULTS)).toString('base64')}));};
+  assert.equal((await invoke('POST',{settings:DEFAULTS})).code,200);assert.equal(writes,0);
+  globalThis.fetch=async(url,init)=>{if(init.method==='PUT')writes++;return new Response(JSON.stringify({sha:'fixture',content:Buffer.from('{invalid').toString('base64')}));};
+  assert.equal((await invoke('POST',{settings:DEFAULTS})).code,502);assert.equal(writes,0);
+});

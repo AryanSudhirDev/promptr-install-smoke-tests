@@ -3,7 +3,8 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {boundedExec as exec} from './exec-bounded.mjs';
 import {validTotal} from './schedule.mjs';
-import {TARGETS,advanceTarget,selectJobs,diskAllowsStart} from './multi-plan.mjs';
+import {TARGETS,selectJobs,diskAllowsStart} from './multi-plan.mjs';
+import {activeRemoteLeases,advanceTargetWithRemoteFencing,expireRemoteLeases} from './macbook-lease.mjs';
 import registryLimiter from './registry-fetch.cjs';
 const {initializeLimiter,readState:readLimiterState,SPACING_MS}=registryLimiter;
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -31,9 +32,10 @@ if(process.env.DAILY_TOTAL){const n=Number(process.env.DAILY_TOTAL);if(!validTot
 const now=Date.now();
 const stores=Object.entries(TARGETS).map(([key,target])=>{
  const file=path.join(here,target.file);const old=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):null;
- const state=advanceTarget(old,now,key,totals[key]);const store={...target,key,total:totals[key],file,state};if(state)atomic(file,state);return store;
+ const state=advanceTargetWithRemoteFencing(old,now,key,totals[key]);const store={...target,key,total:totals[key],file,state};if(state)atomic(file,state);return store;
 });
 const persist=store=>{if(store.state)atomic(store.file,store.state);};
+for(const {store} of expireRemoteLeases(stores,now))persist(store);
 const allJobs=()=>stores.flatMap(store=>Object.values(store.state?.jobs||{}).map(job=>({job,store})));
 const pending=()=>selectJobs(stores,Infinity).length;
 const freeBytes=()=>{const s=fs.statfsSync(here);return Number(s.bavail)*Number(s.bsize);};
@@ -43,7 +45,7 @@ try{
  try{await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
  catch{await exec('colima',['start','--vm-type','vz','--cpu','4','--memory','6','--disk','10'],{timeout:120000});await exec('docker',['info','--format','{{.NCPU}}'],{timeout:10000});}
 }catch(e){blocked('Docker unavailable: '+e.message);process.exit(1);}
-for(const {job,store} of allJobs().filter(({job})=>['started','cleanup_pending'].includes(job.status))){
+for(const {job,store} of allJobs().filter(({job})=>['started','cleanup_pending'].includes(job.status)&&job.remoteHost!=='macbook')){
  try{await removeContainer('promptr-check-'+job.id);}catch(e){job.status='cleanup_pending';persist(store);blocked('Container cleanup unavailable: '+e.message);process.exit(1);}
  job.status='interrupted';job.finishedAt=new Date().toISOString();persist(store);
 }
@@ -53,7 +55,8 @@ try{
  initializeLimiter(limiterDir,{containersAbsent:true});
  if(!diskAllowsStart(fs.statfsSync(here)))throw new Error('Less than 5 GiB disk space remains; new checks paused');
 }catch(e){blocked('Safety preflight: '+e.message);process.exit(1);}
-const concurrency=3,maxPerRun=process.env.MAX_JOBS_PER_RUN?Number(process.env.MAX_JOBS_PER_RUN):100,timeBudget=20*60000;
+const remoteLeaseCount=activeRemoteLeases(stores).length;
+const concurrency=Math.max(0,3-remoteLeaseCount),maxPerRun=process.env.MAX_JOBS_PER_RUN?Number(process.env.MAX_JOBS_PER_RUN):100,timeBudget=20*60000;
 if(!Number.isInteger(maxPerRun)||maxPerRun<1||maxPerRun>100)throw new Error('invalid MAX_JOBS_PER_RUN');
 let cleanupBlocked=false,ratePaused=false,limiterBlocked=false,diskPaused=false;
 function canStart(){
@@ -63,13 +66,13 @@ function canStart(){
  return true;
 }
 const due=selectJobs(stores,maxPerRun),queue=[...due],results=[];
-console.log(`[monitor] ${new Date().toISOString()} rates=${JSON.stringify(totals)}/day pending=${pending()} batch=${due.length} shared-concurrency=${concurrency}`);
+console.log(`[monitor] ${new Date().toISOString()} rates=${JSON.stringify(totals)}/day pending=${pending()} batch=${due.length} local-concurrency=${concurrency} active-remote=${remoteLeaseCount} shared-cap=3`);
 const variants=['manifest','clean-state','settings-isolation','ui-settings','reinstall','duplicate-install'];
 const started=Date.now();
 const phase=()=>cleanupBlocked||limiterBlocked||diskPaused?'blocked':ratePaused?'cooldown':'idle';
 function publish(currentPhase='running'){
  const targetResults=Object.fromEntries(stores.map(store=>{const rows=results.filter(r=>r.target===store.key);return [store.key,{dailyTotal:store.total,passed:rows.filter(j=>j.status==='passed').length,failed:rows.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:selectJobs([store],Infinity).length}];}));
- const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:totals.promptr,targetDailyTotals:totals,totalDailyChecks:totals.promptr+totals.cognispec,targetResults,slotsPerDay:288,phase:currentPhase,freeDiskGiB:Math.round(freeBytes()/1024**3*100)/100,registryLimiter:{spacingMs:SPACING_MS,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:pending(),missedSlots:stores.reduce((n,s)=>n+(s.state?.missedSlots||0),0),expired:allJobs().filter(({job})=>job.status==='expired').length,interrupted:allJobs().filter(({job})=>job.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};
+ const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:totals.promptr,targetDailyTotals:totals,totalDailyChecks:totals.promptr+totals.cognispec,targetResults,slotsPerDay:288,phase:currentPhase,freeDiskGiB:Math.round(freeBytes()/1024**3*100)/100,registryLimiter:{spacingMs:SPACING_MS,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},sharedConcurrencyCap:3,activeRemoteLeases:activeRemoteLeases(stores).length,remoteCleanupPending:activeRemoteLeases(stores).filter(({job})=>job.status==='remote_cleanup_pending').length,localConcurrency:concurrency,selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:pending(),missedSlots:stores.reduce((n,s)=>n+(s.state?.missedSlots||0),0),expired:allJobs().filter(({job})=>job.status==='expired').length,interrupted:allJobs().filter(({job})=>job.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};
  if(diskPaused)summary.error='Less than 5 GiB disk space remains; new checks paused';
  atomic(statusFile,summary);return summary;
 }
