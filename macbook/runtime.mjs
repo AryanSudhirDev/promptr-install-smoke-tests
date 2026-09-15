@@ -4,6 +4,9 @@ import {run} from './exec.mjs';
 import {parsePower,onPhysicalHomeNetwork,gate,validateSettings} from './policy.mjs';
 export const ROOT=process.env.MACBOOK_QA_HOME||path.join(process.env.HOME,'Library/Application Support/Promptr QA MacBook');
 export const DOCKER='/Applications/Docker.app/Contents/Resources/bin/docker';
+// launchd's minimal PATH omits Docker's credential helpers. Keep the existing
+// credential store intact and let Docker invoke its installed helper normally.
+if(process.platform==='darwin')process.env.PATH=path.dirname(DOCKER)+path.delimiter+(process.env.PATH||'/usr/bin:/bin:/usr/sbin:/sbin');
 export function atomic(file,data){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data,null,2)+'\n',{mode:0o600});fs.renameSync(tmp,file);}
 export function localConfig(){return JSON.parse(fs.readFileSync(path.join(ROOT,'local.json'),'utf8'));}
 export async function power(){try{return parsePower((await run('/usr/bin/pmset',['-g','batt'],{timeout:5000})).stdout);}catch{return {known:false,percent:null,onAC:false};}}
