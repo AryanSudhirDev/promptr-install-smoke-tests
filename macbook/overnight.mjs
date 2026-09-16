@@ -7,7 +7,15 @@ export const CONTAINER_MEMORY_GIB=2;
 export const DOCKER_RESERVE_GIB=1;
 export const OVERNIGHT_HOURS_DEFAULT=8;
 export const OVERNIGHT_HOURS_MIN=1;
-export const OVERNIGHT_HOURS_MAX=12;
+export const OVERNIGHT_HOURS_MAX=24;
+// Owner instruction 2026-09-15: high concurrency may run all day, not only at night,
+// while the laptop is plugged in and on the home network. The supervisor keeps a
+// full-day window renewed under those conditions; losing AC or home ends it.
+export const SUSTAINED_HOURS=24;
+export const SUSTAINED_RENEW_BELOW_MS=6*3600000;
+// The nightly "going to sleep" button runs until this local wall-clock time.
+export const MORNING_END_HOUR=7;
+export const MORNING_END_MINUTE=50;
 export const OVERNIGHT_FILE='overnight.json';
 export const RECOMMENDED_DOCKER_GIB=24;
 export const CHECK_SECONDS=18.5;
@@ -16,6 +24,27 @@ export const OVERNIGHT_COGNISPEC_CHECKS=6000;
 export const OVERNIGHT_TARGET_CHECKS=OVERNIGHT_PROMPTR_CHECKS+OVERNIGHT_COGNISPEC_CHECKS;
 export const MAX_PLAN_TARGET=50000;
 const GIB=1024**3;
+
+export function hoursUntilMorningEnd(now=Date.now()){
+ const end=new Date(now);
+ end.setHours(MORNING_END_HOUR,MORNING_END_MINUTE,0,0);
+ if(end.getTime()<=now)end.setDate(end.getDate()+1);
+ const hours=Math.ceil((end.getTime()-now)/3600000);
+ return Math.min(OVERNIGHT_HOURS_MAX,Math.max(OVERNIGHT_HOURS_MIN,hours));
+}
+
+// High concurrency all day needs mains power and the home network. Both are already
+// resolved by the eligibility gate, so this never probes anything itself.
+export function shouldSustain({enabled=false,onAC=false,home=false}={}){
+ return Boolean(enabled&&onAC&&home);
+}
+
+// True when a sustained window needs writing: none active, or the active one is
+// close enough to expiry that it should be pushed out again.
+export function sustainedNeedsRenewal(state,now=Date.now()){
+ if(!overnightActive(state,now))return true;
+ return Date.parse(state.until)-now<SUSTAINED_RENEW_BELOW_MS;
+}
 
 export function overnightActive(state,now=Date.now()){
  if(!state||typeof state!=='object'||Array.isArray(state))return false;

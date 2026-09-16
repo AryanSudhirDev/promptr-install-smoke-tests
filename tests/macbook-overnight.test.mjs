@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
- DAY_WORKERS,OVERNIGHT_MAX_WORKERS,RECOMMENDED_DOCKER_GIB,applyOvernight,dockerGiB,
- localStatusAllowed,overnightActive,overnightClaimPlan,overnightNightChecks,parseOvernightInput,readOvernight,startOvernightState,workerCount,
+ DAY_WORKERS,OVERNIGHT_MAX_WORKERS,RECOMMENDED_DOCKER_GIB,SUSTAINED_HOURS,applyOvernight,dockerGiB,
+ hoursUntilMorningEnd,localStatusAllowed,overnightActive,overnightClaimPlan,overnightNightChecks,parseOvernightInput,readOvernight,
+ shouldSustain,startOvernightState,sustainedNeedsRenewal,workerCount,
 } from '../macbook/overnight.mjs';
 import {applyDockerMemorySetting,dockerMemoryMiB,withDockerMemory} from '../macbook/docker-memory.mjs';
 
@@ -57,7 +58,41 @@ test('overnight window is time-bounded and expires closed',()=>{
  assert.equal(overnightActive(state,now+8*3600000),false);
  assert.equal(overnightActive(null,now),false);
  assert.throws(()=>startOvernightState({now,hours:0}));
- assert.throws(()=>startOvernightState({now,hours:13}));
+ assert.throws(()=>startOvernightState({now,hours:25}));
+});
+
+test('a full day is a valid window and keeps the same planned totals as an eight-hour night',()=>{
+ assert.equal(SUSTAINED_HOURS,24);
+ const overnight=startOvernightState({now,hours:SUSTAINED_HOURS});
+ assert.equal(overnightActive(overnight,now+23*3600000),true);
+ const plan=overnightClaimPlan({promptrDailyTotal:2000,cognispecDailyTotal:3000},{overnight,memTotalBytes:gib(24),now});
+ assert.equal(plan.workers,11);
+ assert.equal(plan.promptrDailyTotal,10500);
+ assert.equal(plan.cognispecDailyTotal,18000);
+});
+
+test('the nightly button runs until the next 7:50 AM local',()=>{
+ const at=(local,hours)=>assert.equal(hoursUntilMorningEnd(Date.parse(local)),hours);
+ at('2026-09-15T23:50:00',8);
+ at('2026-09-15T21:50:00',10);
+ at('2026-09-16T07:49:00',1);
+ at('2026-09-16T07:50:00',24);
+ at('2026-09-16T08:00:00',24);
+ assert.ok(hoursUntilMorningEnd()>=1&&hoursUntilMorningEnd()<=24);
+});
+
+test('sustained high concurrency needs AC and home, and renews before it lapses',()=>{
+ assert.equal(shouldSustain({enabled:true,onAC:true,home:true}),true);
+ assert.equal(shouldSustain({enabled:true,onAC:false,home:true}),false);
+ assert.equal(shouldSustain({enabled:true,onAC:true,home:false}),false);
+ assert.equal(shouldSustain({enabled:false,onAC:true,home:true}),false);
+ assert.equal(shouldSustain(),false);
+ const day=startOvernightState({now,hours:24});
+ assert.equal(sustainedNeedsRenewal(null,now),true);
+ assert.equal(sustainedNeedsRenewal(day,now),false);
+ assert.equal(sustainedNeedsRenewal(day,now+18*3600000),false);
+ assert.equal(sustainedNeedsRenewal(day,now+18*3600000+1),true);
+ assert.equal(sustainedNeedsRenewal(day,now+24*3600000),true);
 });
 
 test('overnight file starts, reads, expires, and stops without leftover state',t=>{
@@ -78,6 +113,9 @@ test('local status page owns the overnight POST and never opens writes to foreig
  assert.match(source,/restartWorker/);
  assert.match(source,/scheduleWorkerRestart/);
  assert.match(source,/applyOvernightDockerMemory/);
+ assert.match(source,/maintainSustainedWindow/);
+ assert.match(source,/shouldSustain/);
+ assert.match(source,/hoursUntilMorningEnd\(\)/);
 });
 
 test('Docker settings write only MemoryMiB and SwapMiB and are a no-op when already at 24 GiB',t=>{
