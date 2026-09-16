@@ -1,5 +1,5 @@
 import os from 'node:os';
-export const DEFAULT_SETTINGS={enabled:true,minBatteryPercent:50,pollIntervalMinutes:10,requireAC:true,requireHome:true,promptrDailyTotal:2000,cognispecDailyTotal:3000};
+export const DEFAULT_SETTINGS={enabled:true,minBatteryPercent:40,pollIntervalMinutes:10,requireAC:false,requireHome:true,promptrDailyTotal:2000,cognispecDailyTotal:3000};
 // Typo guard only, not the approved volume: keep equal to the bounds in api/macbook.js and
 // imac/macbook-broker.mjs. A dashboard value above this makes the supervisor pause, fail-closed.
 export const MAX_TARGET=50000;
@@ -24,12 +24,21 @@ export function onPhysicalHomeNetwork(cidr,interfaces=os.networkInterfaces()){
  const mask=(0xffffffff<<(32-bits))>>>0,net=ipNumber(network)&mask;
  return Object.entries(interfaces).some(([name,rows])=>/^en\d+$/.test(name)&&rows.some(r=>r.family==='IPv4'&&!r.internal&&(ipNumber(r.address)&mask)===net));
 }
+// Owner instruction 2026-09-15: under the battery floor the laptop must be plugged in; at or above
+// it, running on battery is fine. On AC the floor does not apply at all, because a low charge while
+// plugged in is filling up rather than draining. `requireAC` still forces mains power when set.
+export function powerAllowsWork({settings,power}){
+ if(!power?.known)return false;
+ if(power.onAC)return true;
+ if(settings.requireAC)return false;
+ return power.percent>=settings.minBatteryPercent;
+}
 export function gate({settings,power,home,freeBytes,configFresh=true}){
  const reasons=[];
  if(!configFresh)reasons.push('settings_unavailable');
  if(!settings.enabled)reasons.push('disabled');
  if(!power.known)reasons.push('power_unknown');
- else {if(power.percent<=settings.minBatteryPercent)reasons.push('battery_threshold');if(settings.requireAC&&!power.onAC)reasons.push('unplugged');}
+ else if(!powerAllowsWork({settings,power}))reasons.push(settings.requireAC&&!power.onAC?'unplugged':'battery_threshold');
  if(settings.requireHome&&!home)reasons.push('away_or_home_device_unreachable');
  if(!Number.isFinite(freeBytes)||freeBytes<20*1024**3)reasons.push('low_disk');
  return {eligible:reasons.length===0,reasons};

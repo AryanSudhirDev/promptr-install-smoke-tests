@@ -9,6 +9,7 @@ import {
  shouldSustain,startOvernightState,sustainedNeedsRenewal,workerCount,
 } from '../macbook/overnight.mjs';
 import {applyDockerMemorySetting,dockerMemoryMiB,withDockerMemory} from '../macbook/docker-memory.mjs';
+import {DEFAULT_SETTINGS} from '../macbook/policy.mjs';
 
 const gib=n=>n*1024**3;
 const now=Date.parse('2026-09-15T07:00:00Z');
@@ -81,11 +82,15 @@ test('the nightly button runs until the next 7:50 AM local',()=>{
  assert.ok(hoursUntilMorningEnd()>=1&&hoursUntilMorningEnd()<=24);
 });
 
-test('sustained high concurrency needs AC and home, and renews before it lapses',()=>{
- assert.equal(shouldSustain({enabled:true,onAC:true,home:true}),true);
- assert.equal(shouldSustain({enabled:true,onAC:false,home:true}),false);
- assert.equal(shouldSustain({enabled:true,onAC:true,home:false}),false);
- assert.equal(shouldSustain({enabled:false,onAC:true,home:true}),false);
+test('sustained high concurrency needs home plus acceptable power, and renews before it lapses',()=>{
+ const settings={...DEFAULT_SETTINGS,requireAC:false,requireHome:true,minBatteryPercent:40};
+ const ac={known:true,percent:12,onAC:true},low={known:true,percent:39,onAC:false},ok={known:true,percent:40,onAC:false};
+ assert.equal(shouldSustain({settings,power:ac,home:true}),true);
+ assert.equal(shouldSustain({settings,power:ok,home:true}),true);
+ assert.equal(shouldSustain({settings,power:low,home:true}),false);
+ assert.equal(shouldSustain({settings,power:ac,home:false}),false);
+ assert.equal(shouldSustain({settings:{...settings,enabled:false},power:ac,home:true}),false);
+ assert.equal(shouldSustain({settings:{...settings,requireAC:true},power:ok,home:true}),false);
  assert.equal(shouldSustain(),false);
  const day=startOvernightState({now,hours:24});
  assert.equal(sustainedNeedsRenewal(null,now),true);

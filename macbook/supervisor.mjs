@@ -66,11 +66,11 @@ function restartWorker(){
  });
 }
 function manageCaffeine(home){const want=settings.enabled&&current.power?.onAC&&(!settings.requireHome||home)&&!closing;if(want&&!caffeine){caffeine=spawn('/usr/bin/caffeinate',['-s','-w',String(process.pid)],{stdio:'ignore'});caffeine.on('error',()=>{caffeine=null;});caffeine.on('exit',()=>{caffeine=null;});}else if(!want&&caffeine){caffeine.kill();caffeine=null;}}
-// Keeps the high-concurrency window alive all day while the laptop is plugged in and
-// at home. Renewing an already-active window is silent; first engaging one restarts
-// the worker so it comes back with the full lane count.
+// Keeps the high-concurrency window alive all day while the laptop is at home on acceptable
+// power. Renewing an already-active window is silent; first engaging one restarts the worker
+// so it comes back with the full lane count.
 async function maintainSustainedWindow(gate){
- if(!shouldSustain({enabled:settings.enabled,onAC:Boolean(gate.power?.onAC),home:gate.home}))return;
+ if(!shouldSustain({settings,power:gate.power,home:gate.home}))return;
  const active=readOvernight(ROOT);
  if(!sustainedNeedsRenewal(active))return;
  applyOvernight(ROOT,{hours:SUSTAINED_HOURS});
@@ -126,7 +126,7 @@ function overnightCopy(s){
   const volume=s.nightChecks?` About ${s.nightChecks.toLocaleString('en-US')} checks over ${s.overnight.hours} h (${(s.promptrNightChecks||0).toLocaleString('en-US')} Promptr, ${(s.cognispecNightChecks||0).toLocaleString('en-US')} CogniSpec, ~${s.nightPerHour}/hour), using ${s.workerCount} concurrent slots.`:'';
   return `Overnight is on until ${s.overnight.until.replace('T',' ').replace(/\.\d+Z$/,' UTC')} (${hoursLeft.toFixed(1)} h left).${volume}`;
  }
- return `High concurrency runs all day while this Mac is plugged in and on the home network; it drops to ${s.dayWorkers} concurrent checks otherwise. An 8-hour stretch at ${s.recommendedDockerGiB} GiB is about ${s.fullNightChecks.toLocaleString('en-US')} checks (~${s.fullNightPerHour}/hour) across ${s.overnightMaxWorkers} slots. RAM could compute ~${s.fullNightComputePerHour}/hour; Open VSX pacing is the slower part.`;
+ return `High concurrency runs all day while this Mac is on the home network and either plugged in or above ${settings.minBatteryPercent}% battery; it drops to ${s.dayWorkers} concurrent checks otherwise. An 8-hour stretch at ${s.recommendedDockerGiB} GiB is about ${s.fullNightChecks.toLocaleString('en-US')} checks (~${s.fullNightPerHour}/hour) across ${s.overnightMaxWorkers} slots. RAM could compute ~${s.fullNightComputePerHour}/hour; Open VSX pacing is the slower part.`;
 }
 function dockerCopy(s){
  const have=s.dockerGiB==null?'unknown':`${s.dockerGiB} GiB`;

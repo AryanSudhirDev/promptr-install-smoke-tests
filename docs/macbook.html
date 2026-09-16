@@ -55,7 +55,7 @@
           <label for="minBattery">Minimum battery percent</label>
           <div class="num-field"><input type="number" id="minBattery" min="10" max="95" step="1" inputmode="numeric" aria-describedby="battery-hint"/><span aria-hidden="true">%</span></div>
         </div>
-        <p class="hint" id="battery-hint">Eligible to run only when battery is strictly above this percent (10 to 95).</p>
+        <p class="hint" id="battery-hint">On battery, eligible only at or above this percent (10 to 95). Below it the Mac must be plugged in; on AC this floor does not apply.</p>
       </div>
       <div class="field-row">
         <div class="num-row">
@@ -76,7 +76,7 @@
       <div class="field-row">
         <div class="toggle-row"><input type="checkbox" id="requireAC" aria-describedby="ac-hint"/><label for="requireAC">Require AC power</label></div>
         <p class="hint" id="ac-hint">Only run while plugged in.</p>
-        <p class="hint warn-hint" id="ac-warn" hidden>Turning this off lets checks run on battery power.</p>
+        <p class="hint warn-hint" id="ac-warn" hidden>Off by design: checks may run on battery, but only at or above the minimum battery percent above.</p>
       </div>
       <div class="field-row">
         <div class="toggle-row"><input type="checkbox" id="requireHome" aria-describedby="home-hint"/><label for="requireHome">Require home network</label></div>

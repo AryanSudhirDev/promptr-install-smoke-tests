@@ -31,9 +31,11 @@ at the end of `OPERATIONS.md`. Read it before changing anything about rates, pac
 - Do not touch the shared 650 ms per-stream registry gap or the three-check concurrency cap. The
   fleet uses two Open VSX streams capped at 2.5 req/s by owner instruction. Those, not the daily
   total, are the safeguards.
-- The MacBook's eleven-lane high-concurrency mode is all-day by owner instruction (2026-09-15), gated
-  on mains power plus the home network, and its nightly window ends at 7:50 AM local. Do not put it
-  back on a night-only schedule or shorten `SUSTAINED_HOURS`; unplugging is the intended off switch.
+- The MacBook's eleven-lane high-concurrency mode is all-day by owner instruction (2026-09-15), and
+  its nightly window ends at 7:50 AM local. It is gated on the home network plus power that
+  `powerAllowsWork` accepts: on AC always, on battery only at or above `minBatteryPercent` (40). The
+  battery floor intentionally does not apply while plugged in. Do not put this back on a night-only
+  schedule, shorten `SUSTAINED_HOURS`, or set `requireAC` back on; leaving home is the off switch.
 - Do not route traffic through proxies or VPN rotation to obscure its source.
 - Never commit `github_token`, `.env`, or `imac_ed25519`.
 - `imac/` and `macbook/` run from deployed copies, not from this checkout; editing a file here

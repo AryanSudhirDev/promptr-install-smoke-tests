@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {powerAllowsWork} from './policy.mjs';
 
 export const DAY_WORKERS=3;
 export const OVERNIGHT_MAX_WORKERS=11;
@@ -8,9 +9,9 @@ export const DOCKER_RESERVE_GIB=1;
 export const OVERNIGHT_HOURS_DEFAULT=8;
 export const OVERNIGHT_HOURS_MIN=1;
 export const OVERNIGHT_HOURS_MAX=24;
-// Owner instruction 2026-09-15: high concurrency may run all day, not only at night,
-// while the laptop is plugged in and on the home network. The supervisor keeps a
-// full-day window renewed under those conditions; losing AC or home ends it.
+// Owner instruction 2026-09-15: high concurrency may run all day, not only at night, while the
+// laptop is on the home network and its power is acceptable (plugged in, or on battery at or above
+// the floor). The supervisor keeps a full-day window renewed under those conditions.
 export const SUSTAINED_HOURS=24;
 export const SUSTAINED_RENEW_BELOW_MS=6*3600000;
 // The nightly "going to sleep" button runs until this local wall-clock time.
@@ -33,10 +34,11 @@ export function hoursUntilMorningEnd(now=Date.now()){
  return Math.min(OVERNIGHT_HOURS_MAX,Math.max(OVERNIGHT_HOURS_MIN,hours));
 }
 
-// High concurrency all day needs mains power and the home network. Both are already
-// resolved by the eligibility gate, so this never probes anything itself.
-export function shouldSustain({enabled=false,onAC=false,home=false}={}){
- return Boolean(enabled&&onAC&&home);
+// High concurrency all day needs the home network plus power the gate accepts: on AC always,
+// on battery only at or above the floor. Both inputs are already resolved by the eligibility
+// gate, so this never probes anything itself.
+export function shouldSustain({settings,power,home=false}={}){
+ return Boolean(settings?.enabled&&home&&powerAllowsWork({settings,power:power||{}}));
 }
 
 // True when a sustained window needs writing: none active, or the active one is
