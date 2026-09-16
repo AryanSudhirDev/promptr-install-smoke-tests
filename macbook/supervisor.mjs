@@ -67,11 +67,18 @@ function restartWorker(){
 }
 function manageCaffeine(home){const want=settings.enabled&&current.power?.onAC&&(!settings.requireHome||home)&&!closing;if(want&&!caffeine){caffeine=spawn('/usr/bin/caffeinate',['-s','-w',String(process.pid)],{stdio:'ignore'});caffeine.on('error',()=>{caffeine=null;});caffeine.on('exit',()=>{caffeine=null;});}else if(!want&&caffeine){caffeine.kill();caffeine=null;}}
 // Keeps the high-concurrency window alive all day while the laptop is at home on acceptable
-// power. Renewing an already-active window is silent; first engaging one restarts the worker
-// so it comes back with the full lane count.
+// power, and takes it away once either condition goes, so leaving the house drops to
+// DAY_WORKERS instead of holding eleven lanes until the window would have expired. Either
+// direction restarts the worker, because a lane count is fixed when the worker starts;
+// renewing a window that is already active changes nothing and stays silent.
 async function maintainSustainedWindow(gate){
- if(!shouldSustain({settings,power:gate.power,home:gate.home}))return;
  const active=readOvernight(ROOT);
+ if(!shouldSustain({settings,power:gate.power,home:gate.home})){
+  if(!active)return;
+  applyOvernight(ROOT,{stop:true});
+  await restartWorker();
+  return;
+ }
  if(!sustainedNeedsRenewal(active))return;
  applyOvernight(ROOT,{hours:SUSTAINED_HOURS});
  if(active)return;

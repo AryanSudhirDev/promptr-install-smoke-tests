@@ -80,8 +80,8 @@
       </div>
       <div class="field-row">
         <div class="toggle-row"><input type="checkbox" id="requireHome" aria-describedby="home-hint"/><label for="requireHome">Require home network</label></div>
-        <p class="hint" id="home-hint">Only run while on the configured home network.</p>
-        <p class="hint warn-hint" id="home-warn" hidden>Turning this off lets checks run outside the home network.</p>
+        <p class="hint" id="home-hint">Only run while on the configured home network. Leave this off to keep running away from home at reduced concurrency.</p>
+        <p class="hint warn-hint" id="home-warn" hidden>Off by design: away from home the Mac keeps running, but at three concurrent checks instead of the full lane count.</p>
       </div>
       <div class="save-row">
         <button type="submit" class="save-button" id="save-btn">Save settings</button>

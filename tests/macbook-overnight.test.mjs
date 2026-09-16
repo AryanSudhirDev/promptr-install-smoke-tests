@@ -121,6 +121,8 @@ test('local status page owns the overnight POST and never opens writes to foreig
  assert.match(source,/maintainSustainedWindow/);
  assert.match(source,/shouldSustain/);
  assert.match(source,/hoursUntilMorningEnd\(\)/);
+ // Losing home or power must take the window away, not wait for it to expire.
+ assert.match(source,/applyOvernight\(ROOT,\{stop:true\}\)/);
 });
 
 test('Docker settings write only MemoryMiB and SwapMiB and are a no-op when already at 24 GiB',t=>{

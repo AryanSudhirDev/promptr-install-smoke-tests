@@ -10,6 +10,10 @@ import {acquireLocalLock} from './pid-lock.mjs';
 
 export const MAX_MACBOOK_WORKERS=DAY_WORKERS;
 const abort=new AbortController();let lastSettings=null;
+// Observed, not required. It picks the SSH route to the broker: the direct home address while on
+// the home network, the remote address once away. Completion and recovery always take the remote
+// route so a check claimed at home can still be reported after leaving.
+let lastHome=false;
 // Losing the race for a shared slot is ordinary contention, not a failure. The broker owns
 // claim serialization, so all lanes may peek and claim independently without duplicate jobs.
 const CONTENDED=new Set(['BUSY','LOCAL_ACTIVE','REMOTE_ACTIVE','GLOBAL_CAP']);
@@ -46,7 +50,7 @@ function createPoolStatus(){
 async function allowed(){
  let runtime;try{runtime=JSON.parse(fs.readFileSync(path.join(ROOT,'runtime.json'),'utf8'));}catch{return false;}
  lastSettings=runtime.settings;const fresh=runtime.configFresh&&Date.now()-Date.parse(runtime.updatedAt)<(runtime.settings.pollIntervalMinutes*60+30)*1000;
- const g=await eligibility(runtime.settings,{configFresh:fresh});return g.eligible;
+ const g=await eligibility(runtime.settings,{configFresh:fresh});lastHome=g.home;return g.eligible;
 }
 async function cleanupAll(){
  const r=await run(DOCKER,['ps','-aq','--filter','label=qa.macbook.runner=promptr-qa'],{timeout:10000});const ids=r.stdout.trim().split(/\s+/).filter(Boolean);if(ids.some(id=>!/^[A-Za-z0-9]+$/.test(id)))throw new Error('Unexpected Docker identity');
@@ -110,9 +114,9 @@ async function laneLoop(lane,image,poolStatus,memTotalBytes){
   const claimedPlan=overnightClaimPlan(lastSettings,{overnight,memTotalBytes});
   const plan={promptrDailyTotal:claimedPlan.promptrDailyTotal,cognispecDailyTotal:claimedPlan.cognispecDailyTotal};
   if(plan.promptrDailyTotal===0&&plan.cognispecDailyTotal===0){poolStatus.report({phase:'paused_plan',detail:'Both independently planned MacBook targets are set to 0/day.'});await sleep(15000,null,{signal:abort.signal});continue;}
-  let peek;try{peek=await broker('macbook-peek',{plan},lastSettings,{signal:abort.signal,timeout:15000});}catch(e){if(abort.signal.aborted||!retriableBroker(e))throw e;poolStatus.report({phase:'waiting_for_work',detail:'Broker peek failed ('+e.message+'); retrying.'});await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;}
+  let peek;try{peek=await broker('macbook-peek',{plan},{...lastSettings,requireHome:lastHome},{signal:abort.signal,timeout:15000});}catch(e){if(abort.signal.aborted||!retriableBroker(e))throw e;poolStatus.report({phase:'waiting_for_work',detail:'Broker peek failed ('+e.message+'); retrying.'});await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;}
   if(!peek.available){await sleep(15000,null,{signal:abort.signal});continue;}
-  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},lastSettings,{signal:abort.signal,timeout:120000});}catch(e){
+  const start=Date.now();let bundle;try{bundle=await broker('macbook-claim',{plan},{...lastSettings,requireHome:lastHome},{signal:abort.signal,timeout:120000});}catch(e){
    if(abort.signal.aborted||!retriableBroker(e))throw e;
    poolStatus.report({phase:'waiting_for_work',detail:(CONTENDED.has(e.code)?'Shared fleet busy ('+e.message+')':'Broker claim failed ('+e.message+')')+'; retrying.'});
    await sleep(retryDelay(e.retryAfterMs),null,{signal:abort.signal});continue;
