@@ -13,10 +13,19 @@ import registryLimiter from './registry-fetch.cjs';
 import {prepareFreshRelay,relayDirectory,removeJobRelay} from './fresh-relay.mjs';
 import {runCheckPipeline} from './check-pipeline.mjs';
 import {prepareSharedLimiter} from './limiter-preflight.mjs';
-const {readState:readLimiterState,SPACING_MS}=registryLimiter;
+const {readState:readLimiterState,SPACING_MS,STREAM_COUNT,TARGET_RPS}=registryLimiter;
 const here=path.dirname(fileURLToPath(import.meta.url));
 const limiterDir=path.join(here,'registry-limit'),stateLock=path.join(here,'.monitor-v2.lock'),processLock=path.join(here,'.monitor-process.lock');
 const statusFile=path.join(here,'status-v2.json');
+function limiterHeldBy(jobId){
+ const names=['lock',...Array.from({length:STREAM_COUNT},(_,i)=>'lock-'+i)];
+ for(const name of names){
+  const dir=path.join(limiterDir,name);
+  if(!fs.existsSync(dir))continue;
+  try{if(JSON.parse(fs.readFileSync(path.join(dir,'owner.json'))).runId===jobId)return true;}catch{return true;}
+ }
+ return false;
+}
 if(fs.existsSync(path.join(here,'.vm-maintenance'))){console.log('[monitor] VM maintenance; leaving planned checks queued');process.exit(0);}
 const atomic=(file,data)=>{const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(data,null,2)+'\n');fs.renameSync(tmp,file);};
 let releaseProcess;
@@ -120,7 +129,7 @@ async function publish(currentPhase='running'){
  await refreshStores();
  const remote=activeRemoteLeases(stores),local=ledgerLocalActivity(stores);
  const targetResults=Object.fromEntries(stores.map(store=>{const rows=results.filter(r=>r.target===store.key);return [store.key,{dailyTotal:store.total,passed:rows.filter(j=>j.status==='passed').length,failed:rows.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:selectJobs([store],Infinity).length}];}));
- const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:totals.promptr,targetDailyTotals:totals,totalDailyChecks:totals.promptr+totals.cognispec,targetResults,slotsPerDay:288,phase:currentPhase,freeDiskGiB:Math.round(freeBytes()/1024**3*100)/100,registryLimiter:{spacingMs:SPACING_MS,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},localConcurrencyCap:GLOBAL_CHECK_CAP,activeRemoteLeases:remote.length,remoteCleanupPending:remote.filter(({job})=>job.status==='remote_cleanup_pending').length,localConcurrency:Math.max(0,GLOBAL_CHECK_CAP-remote.length),activeLocalLedgerJobs:local.length,preparedLocalJobs:allJobs().filter(({job})=>['preparing','ready'].includes(job.status)).length,pipeline:{downloaders:1,maxReady:1,testContainers:GLOBAL_CHECK_CAP},selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:pending(),missedSlots:stores.reduce((n,s)=>n+(s.state?.missedSlots||0),0),expired:allJobs().filter(({job})=>job.status==='expired').length,interrupted:allJobs().filter(({job})=>job.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};
+ const summary={at:new Date().toISOString(),schedulerVersion:2,dailyTotal:totals.promptr,targetDailyTotals:totals,totalDailyChecks:totals.promptr+totals.cognispec,targetResults,slotsPerDay:288,phase:currentPhase,freeDiskGiB:Math.round(freeBytes()/1024**3*100)/100,registryLimiter:{spacingMs:SPACING_MS,targetRps:TARGET_RPS,streamCount:STREAM_COUNT,cooldownUntil:readLimiterState(limiterDir).cooldownUntil},localConcurrencyCap:GLOBAL_CHECK_CAP,activeRemoteLeases:remote.length,remoteCleanupPending:remote.filter(({job})=>job.status==='remote_cleanup_pending').length,localConcurrency:Math.max(0,GLOBAL_CHECK_CAP-remote.length),activeLocalLedgerJobs:local.length,preparedLocalJobs:allJobs().filter(({job})=>['preparing','ready'].includes(job.status)).length,pipeline:{downloaders:STREAM_COUNT,maxReady:1,testContainers:GLOBAL_CHECK_CAP},selected:due.length,due:results.length,passed:results.filter(j=>j.status==='passed').length,failed:results.filter(j=>['failed','cleanup_pending'].includes(j.status)).length,pending:pending(),missedSlots:stores.reduce((n,s)=>n+(s.state?.missedSlots||0),0),expired:allJobs().filter(({job})=>job.status==='expired').length,interrupted:allJobs().filter(({job})=>job.status==='interrupted').length,slots:[...new Set(results.map(j=>new Date(j.slot).toISOString()))]};
  if(diskPaused)summary.error='Less than 5 GiB disk space remains; new checks paused';
  if(pipelineError)summary.error=pipelineError;
  atomic(statusFile,summary);return summary;
@@ -155,7 +164,7 @@ async function prepareCandidate(candidate){
   const saved=await mutateLocalJob(job.id,({job:fresh})=>{if(fresh.status!=='preparing')return false;Object.assign(fresh,{status,error:String(error.message).slice(0,200),finishedAt:new Date().toISOString(),seconds:(Date.now()-Date.parse(fresh.startedAt))/1000});});
   if(saved)results.push({...saved.job});
   if(error.code==='REGISTRY_COOLDOWN')ratePaused=true;
-  try{const owner=JSON.parse(fs.readFileSync(path.join(limiterDir,'lock','owner.json')));if(owner.runId===job.id)limiterBlocked=true;}catch(error){if(error.code!=='ENOENT')limiterBlocked=true;}
+  if(limiterHeldBy(job.id))limiterBlocked=true;
   await publish(phase());console.error('[monitor] Fresh preparation failed for '+job.id+': '+error.message);return null;
  }
 }
@@ -198,7 +207,7 @@ async function run(reservation){
   update={status:'failed',error:String(e.message).slice(0,200)};
   if(e.stdout||e.stderr)fs.writeFileSync(path.join(out,'container.log'),(e.stdout||'')+'\n--- stderr ---\n'+(e.stderr||''));
   try{await removeContainer(name);}catch(cleanupError){cleanupBlocked=true;update.status='cleanup_pending';update.cleanupError=cleanupError.message;}
-  if(fs.existsSync(path.join(limiterDir,'lock'))){try{if(JSON.parse(fs.readFileSync(path.join(limiterDir,'lock','owner.json'))).runId===job.id)limiterBlocked=true;}catch{limiterBlocked=true;}}
+  if(limiterHeldBy(job.id))limiterBlocked=true;
   if((e.stdout||'').includes('PROMPTR_REGISTRY_COOLDOWN')||(e.stderr||'').includes('PROMPTR_REGISTRY_COOLDOWN'))ratePaused=true;
  }
  if(update.status!=='cleanup_pending'){try{removeJobRelay(here,job.id);}catch(error){cleanupBlocked=true;update.status='cleanup_pending';update.cleanupError='Job artifact cleanup: '+error.message;}}

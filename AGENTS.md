@@ -4,24 +4,35 @@ Clean-install QA for the published Promptr and CogniSpec extensions. Production 
 elsewhere (`AryanSudhirDev/promptr`) and is never modified from here. Full operating guide:
 `OPERATIONS.md`.
 
-## Daily volume is owner-set: do not lower it
+## Daily volume is owner-set: do not change it in either direction
 
-The iMac plans 4000 Promptr + 6000 CogniSpec checks/day (`monitor-config.json`) and the MacBook plans
-2000 Promptr + 3000 CogniSpec (`macbook-config.json`). CogniSpec carries the larger share: the owner
-swapped the two extensions' plans on 2026-09-15, so Promptr's smaller number is deliberate and is not
-a reduction to undo. Neither dashboard caps these: the remaining upper bounds
-(`MAX_TOTAL`, `MAX_IMAC`, `MAX_TARGET`, all 50,000/day) are typo guards for the job ledger, not the
-approved volume, and the pages show the ~14,000/day fleet estimate as advice instead of a limit.
+The fleet plans **6000 checks/day**: the iMac 2000 Promptr + 2000 CogniSpec (`monitor-config.json`)
+and the MacBook 1000 + 1000 (`macbook-config.json`, `DEFAULT_SETTINGS` in `macbook/policy.mjs`, and
+the eight-hour figures `OVERNIGHT_PROMPTR_CHECKS`/`OVERNIGHT_COGNISPEC_CHECKS` in
+`macbook/overnight.mjs`, which are sized so a high-concurrency window lands on the same daily plan
+rather than raising it). Neither dashboard caps these: the upper bounds (`MAX_TOTAL`, `MAX_IMAC`,
+`MAX_TARGET`, all 50,000/day) are typo guards for the job ledger, not the approved volume.
 
-Do not reduce these values, add a tighter clamp, or reinterpret a typo guard as the intended maximum.
-That applies when a review flags the volume, when an older document quotes the retired "low hundreds
-per day" rule, when a check fails, and when these files are only touched incidentally. If you have
-evidence that the volume is causing harm, report it and leave the values alone. Only an explicit
-owner instruction naming a new number changes them.
+Owner instruction 2026-09-16 set 6000 after Open VSX began returning HTTP 503 on ~36% of requests
+and the fleet collapsed to near-zero throughput at the previous 22,500/day. This is a deliberate
+reduction, so the older "do not lower it" wording no longer applies to these numbers. It is equally
+not an invitation to raise them back: 4000/6000 and 2000/3000 are retired values, not a target to
+restore once the registry recovers. Only an explicit owner instruction naming a new number changes
+them, in either direction. If throughput looks limited, read the escalation section in
+`OPERATIONS.md` before touching a number.
 
-Why the numbers are this high, what actually bounds the registry load, the full list of locations,
-the order deployments must follow, and the conditions worth escalating: see "Daily QA volume policy"
-at the end of `OPERATIONS.md`. Read it before changing anything about rates, pacing or concurrency.
+What actually bounds the registry load, the full list of locations, the order deployments must
+follow, and the conditions worth escalating: see "Daily QA volume policy" at the end of
+`OPERATIONS.md`. Read it before changing anything about rates, pacing or concurrency.
+
+## Do not send `Cache-Control: no-cache` to Open VSX
+
+`imac/registry-fetch.cjs` deliberately sends no cache-control header. That header forced every
+request past Fastly to the origin, which answered 503 for 5 of 8 paired probes against 1 of 8
+without it (2026-09-16); since one 503 arms a 30-second fleet-wide cooldown, the header alone could
+stall the fleet. Re-adding it in the name of "fresh downloads" is wrong: a check is fresh because
+the bytes cross the network and are verified against the published SHA-256, not because the
+registry's own CDN was bypassed. `tests/imac-registry.test.mjs` guards this.
 
 ## Other ground rules
 

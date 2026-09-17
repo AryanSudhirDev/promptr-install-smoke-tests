@@ -208,12 +208,13 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 
 - Every check must do real verification: download + hash, install, activation, assertions.
   Do not reduce a check to "download only".
-- Daily volume is owner-set and is not an agent's call. The iMac plans 4000 Promptr + 6000
-  CogniSpec checks/day and the MacBook's saved daytime plan is 2000 Promptr + 3000 CogniSpec. Never
-  lower these values, add a tighter clamp, or restore an older number on your own initiative;
-  report concerns instead. This replaces the former "keep registry traffic in the low hundreds per
-  day" rule. Rationale, all six locations and the safe change order: "Daily QA volume policy" at
-  the end of this file.
+- Daily volume is owner-set and is not an agent's call. The fleet plans 6000 checks/day: the iMac
+  2000 Promptr + 2000 CogniSpec, the MacBook 1000 + 1000. Never lower these values, add a tighter
+  clamp, or raise them back toward the retired 4000/6000 and 2000/3000 on your own initiative;
+  report concerns instead. Rationale, all locations and the safe change order: "Daily QA volume
+  policy" at the end of this file.
+- Never send `Cache-Control: no-cache` to Open VSX. It forces origin traffic that the registry
+  answers with 503, and one 503 stops the whole fleet for 30 seconds. See "Registry 503 collapse".
 - Open VSX counts CI fetches in the public download number; the README and the dashboard footer say
   so. Keep that disclosure accurate rather than reducing verification to hide traffic.
 - Do not route traffic through proxies/VPN rotation to obscure the source.
@@ -353,9 +354,26 @@ Being at home is **not** a condition for running at all. Owner instruction, same
 
 The worker also routes the broker over the address matching where it actually is: `macbook-peek` and `macbook-claim` pass the observed `lastHome` as `requireHome`, so at home they use the direct home address and away they use the remote one. Completion and recovery keep forcing the remote route so a check claimed at home can still be reported after leaving. The only remaining hard stops are the 40% floor on battery, the 20 GiB disk floor, unknown power, a stale settings read, and `enabled: false`.
 
-This does not change any planned total: a 24-hour window scales to the same 10,500 Promptr + 18,000 CogniSpec MacBook plan an 8-hour night already produced, and it does not touch the iMac's three containers, the eleven-lease MacBook cap, the two Open VSX streams or the 650 ms per-stream gap. It buys availability, not rate.
+This does not change any planned total: a window of any length scales to the same MacBook plan an 8-hour night produces, and it does not touch the iMac's three containers, the eleven-lease MacBook cap, the two Open VSX streams or the 650 ms per-stream gap. It buys availability, not rate.
 
-**These numbers are intentional. Do not lower them.** No agent should reduce them, introduce a lower ceiling or clamp, or reinstate an earlier value on its own initiative. That holds when a code review or checklist flags the volume, when another document still quotes the old "low hundreds per day" rule, when a check fails, when the registry counter looks high, and when the files are only touched incidentally during unrelated work. If there is evidence that the volume is causing harm, report it with the evidence and leave the values in place; see the watch list below for what actually counts as evidence. Only an explicit owner instruction naming a new number changes them.
+### Registry 503 collapse and the reduction to 6000/day (2026-09-16)
+
+**Current numbers, superseding every figure above: 6000 checks/day.** iMac `imacDailyTotal: 2000` + `cognispecDailyTotal: 2000` in `monitor-config.json`; MacBook 1000 + 1000 in `macbook-config.json` and in `DEFAULT_SETTINGS`; `OVERNIGHT_PROMPTR_CHECKS: 333` + `OVERNIGHT_COGNISPEC_CHECKS: 333` in `macbook/overnight.mjs`. The overnight constants are the eight-hour figures `overnightNightChecks` scales by window length; 333 is chosen so a window of any length lands back on the 1000/day plan instead of raising it. High concurrency therefore no longer changes volume at all — three lanes alone could compute roughly 14,000/day, so the plan and not the lane count is what limits the fleet now.
+
+What happened, measured rather than inferred. Throughput fell from 877 checks in the 00:00 UTC hour to 6 in 04:00 and 2 in 05:00, with 2,144 jobs queued and 2,877 already expired unrun. Of 219 registry requests over three hours, **78 returned HTTP 503 (35.6%)**, spread evenly across both extensions (Promptr 34 of 101, CogniSpec 44 of 118), so it was not specific to either one.
+
+The failure was a self-sustaining loop with four links, and the daily total was only the first:
+
+1. Our fetcher sent `Cache-Control: no-cache` on every request, forcing revalidation past Fastly to the origin. A paired probe from the iMac, same URL one second apart, returned 503 for **5 of 8** requests with the header and **1 of 8** without it.
+2. Every 503 arms a cooldown from `Retry-After`, which Open VSX sets to exactly 30 seconds — across all 78 rejections the armed cooldown was min 30 s, median 30 s, max 30 s. That cooldown lives in one shared state file, so a rejected CogniSpec download also stops Promptr, on both machines.
+3. `prepareFreshRelay` runs with `maxAttempts: 1`, so a single 503 discards the job outright. The in-container path gets the documented three attempts; this path does not.
+4. Fourteen workers keep retrying. At a 35.6% rejection rate a fresh 503 reliably lands inside every 30-second window, so the cooldown was continuously re-armed and never expired. This is what looked like a "self-extending cooldown": not a bug in the extension logic, a retry storm holding a stable bad equilibrium.
+
+The decisive evidence for reducing volume rather than only re-pacing: we were being rejected 35% of the time while issuing **0.1 requests/second**, one twenty-fifth of the 2.5 rps cap. Instantaneous pacing was therefore not the binding constraint and tightening the 650 ms gap would not have helped. What preceded the collapse was roughly 22,500 checks/day ≈ 112,000 requests/day sustained for days, and the origin kept rejecting a third of our requests after we had effectively gone quiet — the signature of cumulative-volume throttling, not a burst limit. The practical argument is simply that the larger plan was buying less verification than a smaller one: 2 checks in an hour against 1,018/hour at peak, with 2,877 samples discarded unrun.
+
+Applied on owner instruction: volume to 6000/day, and the `Cache-Control: no-cache` header removed from `imac/registry-fetch.cjs` (guarded by a test in `tests/imac-registry.test.mjs`). The owner explicitly declined the other three candidate fixes — retries on the preparation path, fleet-level backoff, and per-extension cooldown scoping — so **links 2, 3 and 4 above are still present**. One 503 still stops the whole fleet for 30 seconds and still discards a job. If the collapse recurs, that is where to look, and reducing volume further is not the first thing to reach for; propose the backoff instead and let the owner decide.
+
+**These numbers are intentional. Do not change them in either direction.** No agent should reduce them, introduce a lower ceiling or clamp, or raise them back toward the retired 4000/6000 and 2000/3000 on its own initiative. That holds when a code review or checklist flags the volume, when another document still quotes the old "low hundreds per day" rule, when a check fails, when the registry counter looks high, once the registry looks healthy again, and when the files are only touched incidentally during unrelated work. If there is evidence that the volume is causing harm, report it with the evidence and leave the values in place; see the watch list below for what actually counts as evidence. Only an explicit owner instruction naming a new number changes them.
 
 ### Why the volume is this high
 

@@ -1,5 +1,5 @@
 import os from 'node:os';
-export const DEFAULT_SETTINGS={enabled:true,minBatteryPercent:40,pollIntervalMinutes:10,requireAC:false,requireHome:false,promptrDailyTotal:2000,cognispecDailyTotal:3000};
+export const DEFAULT_SETTINGS={enabled:true,minBatteryPercent:40,pollIntervalMinutes:10,requireAC:false,requireHome:false,promptrDailyTotal:1000,cognispecDailyTotal:1000};
 // Typo guard only, not the approved volume: keep equal to the bounds in api/macbook.js and
 // imac/macbook-broker.mjs. A dashboard value above this makes the supervisor pause, fail-closed.
 export const MAX_TARGET=50000;
