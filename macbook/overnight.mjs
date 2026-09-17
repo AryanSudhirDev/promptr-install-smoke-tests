@@ -20,13 +20,12 @@ export const MORNING_END_MINUTE=50;
 export const OVERNIGHT_FILE='overnight.json';
 export const RECOMMENDED_DOCKER_GIB=24;
 export const CHECK_SECONDS=18.5;
-// Owner instruction 2026-09-16: the fleet plans 6000 checks/day, of which the MacBook owns
-// 1000 Promptr + 1000 CogniSpec. These are the eight-hour figures `overnightNightChecks` scales
-// by window length, set so a window of any length lands on that same daily plan instead of
-// raising it. High concurrency now buys slack, not extra volume: three lanes alone could compute
-// ~14,000/day, so the lane count stopped being what limits the plan.
-export const OVERNIGHT_PROMPTR_CHECKS=333;
-export const OVERNIGHT_COGNISPEC_CHECKS=333;
+// Owner instruction 2026-09-17: MacBook plan is 2000 Promptr + 2000 CogniSpec. These are the
+// eight-hour figures `overnightNightChecks` scales by window length, set so a window of any
+// length lands on that same daily plan instead of raising it. 666*24/8 = 1998, then
+// max(2000, ceil(1998)) keeps the saved daytime total.
+export const OVERNIGHT_PROMPTR_CHECKS=666;
+export const OVERNIGHT_COGNISPEC_CHECKS=666;
 export const OVERNIGHT_TARGET_CHECKS=OVERNIGHT_PROMPTR_CHECKS+OVERNIGHT_COGNISPEC_CHECKS;
 export const MAX_PLAN_TARGET=50000;
 const GIB=1024**3;

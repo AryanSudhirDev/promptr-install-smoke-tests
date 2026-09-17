@@ -6,20 +6,18 @@ elsewhere (`AryanSudhirDev/promptr`) and is never modified from here. Full opera
 
 ## Daily volume is owner-set: do not change it in either direction
 
-The fleet plans **6000 checks/day**: the iMac 2000 Promptr + 2000 CogniSpec (`monitor-config.json`)
-and the MacBook 1000 + 1000 (`macbook-config.json`, `DEFAULT_SETTINGS` in `macbook/policy.mjs`, and
+The fleet plans **8000 checks/day**: the iMac 2000 Promptr + 2000 CogniSpec (`monitor-config.json`)
+and the MacBook 2000 + 2000 (`macbook-config.json`, `DEFAULT_SETTINGS` in `macbook/policy.mjs`, and
 the eight-hour figures `OVERNIGHT_PROMPTR_CHECKS`/`OVERNIGHT_COGNISPEC_CHECKS` in
 `macbook/overnight.mjs`, which are sized so a high-concurrency window lands on the same daily plan
 rather than raising it). Neither dashboard caps these: the upper bounds (`MAX_TOTAL`, `MAX_IMAC`,
 `MAX_TARGET`, all 50,000/day) are typo guards for the job ledger, not the approved volume.
 
-Owner instruction 2026-09-16 set 6000 after Open VSX began returning HTTP 503 on ~36% of requests
-and the fleet collapsed to near-zero throughput at the previous 22,500/day. This is a deliberate
-reduction, so the older "do not lower it" wording no longer applies to these numbers. It is equally
-not an invitation to raise them back: 4000/6000 and 2000/3000 are retired values, not a target to
-restore once the registry recovers. Only an explicit owner instruction naming a new number changes
-them, in either direction. If throughput looks limited, read the escalation section in
-`OPERATIONS.md` before touching a number.
+Owner instruction 2026-09-17 stepped MacBook from 1000+1000 to 2000+2000 (fleet 6000 → 8000) so
+eleven lanes have work for more of the day. That is not a restore of the retired 22,500/day plan.
+Owner instruction 2026-09-16 set 6000 after Open VSX 503s; 8000 is a watch-and-step from there.
+Only an explicit owner instruction naming a new number changes them, in either direction. If
+throughput looks limited, read the escalation section in `OPERATIONS.md` before touching a number.
 
 What actually bounds the registry load, the full list of locations, the order deployments must
 follow, and the conditions worth escalating: see "Daily QA volume policy" at the end of

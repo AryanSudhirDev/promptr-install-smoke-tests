@@ -208,8 +208,8 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 
 - Every check must do real verification: download + hash, install, activation, assertions.
   Do not reduce a check to "download only".
-- Daily volume is owner-set and is not an agent's call. The fleet plans 6000 checks/day: the iMac
-  2000 Promptr + 2000 CogniSpec, the MacBook 1000 + 1000. Never lower these values, add a tighter
+- Daily volume is owner-set and is not an agent's call. The fleet plans 8000 checks/day: the iMac
+  2000 Promptr + 2000 CogniSpec, the MacBook 2000 + 2000. Never lower these values, add a tighter
   clamp, or raise them back toward the retired 4000/6000 and 2000/3000 on your own initiative;
   report concerns instead. Rationale, all locations and the safe change order: "Daily QA volume
   policy" at the end of this file.
@@ -358,7 +358,9 @@ This does not change any planned total: a window of any length scales to the sam
 
 ### Registry 503 collapse and the reduction to 6000/day (2026-09-16)
 
-**Current numbers, superseding every figure above: 6000 checks/day.** iMac `imacDailyTotal: 2000` + `cognispecDailyTotal: 2000` in `monitor-config.json`; MacBook 1000 + 1000 in `macbook-config.json` and in `DEFAULT_SETTINGS`; `OVERNIGHT_PROMPTR_CHECKS: 333` + `OVERNIGHT_COGNISPEC_CHECKS: 333` in `macbook/overnight.mjs`. The overnight constants are the eight-hour figures `overnightNightChecks` scales by window length; 333 is chosen so a window of any length lands back on the 1000/day plan instead of raising it. High concurrency therefore no longer changes volume at all — three lanes alone could compute roughly 14,000/day, so the plan and not the lane count is what limits the fleet now.
+**Current numbers, superseding every figure above: 8000 checks/day.** iMac `imacDailyTotal: 2000` + `cognispecDailyTotal: 2000` in `monitor-config.json`; MacBook 2000 + 2000 in `macbook-config.json` and in `DEFAULT_SETTINGS`; `OVERNIGHT_PROMPTR_CHECKS: 666` + `OVERNIGHT_COGNISPEC_CHECKS: 666` in `macbook/overnight.mjs`. The overnight constants are the eight-hour figures `overnightNightChecks` scales by window length; 666 is chosen so a window of any length lands back on the 2000/day plan instead of raising it (`666*24/8 = 1998`, then `max(2000, ceil(1998))`). High concurrency still does not change volume — it only spends the same MacBook plan faster.
+
+Owner instruction 2026-09-17: step MacBook 1000+1000 → 2000+2000 (fleet 6000 → 8000) so eleven lanes have work for more of the day after they drained the 2000-check plan before noon UTC. This is a watch-and-step, not a restore of 22,500/day. If 503s stay in the low single digits for a stretch, another named step is allowed; if they climb toward 15–30% or the 30-second cooldown latches for hours, do not raise further.
 
 What happened, measured rather than inferred. Throughput fell from 877 checks in the 00:00 UTC hour to 6 in 04:00 and 2 in 05:00, with 2,144 jobs queued and 2,877 already expired unrun. Of 219 registry requests over three hours, **78 returned HTTP 503 (35.6%)**, spread evenly across both extensions (Promptr 34 of 101, CogniSpec 44 of 118), so it was not specific to either one.
 
@@ -373,7 +375,7 @@ The decisive evidence for reducing volume rather than only re-pacing: we were be
 
 Applied on owner instruction: volume to 6000/day, and the `Cache-Control: no-cache` header removed from `imac/registry-fetch.cjs` (guarded by a test in `tests/imac-registry.test.mjs`). The owner explicitly declined the other three candidate fixes — retries on the preparation path, fleet-level backoff, and per-extension cooldown scoping — so **links 2, 3 and 4 above are still present**. One 503 still stops the whole fleet for 30 seconds and still discards a job. If the collapse recurs, that is where to look, and reducing volume further is not the first thing to reach for; propose the backoff instead and let the owner decide.
 
-**These numbers are intentional. Do not change them in either direction.** No agent should reduce them, introduce a lower ceiling or clamp, or raise them back toward the retired 4000/6000 and 2000/3000 on its own initiative. That holds when a code review or checklist flags the volume, when another document still quotes the old "low hundreds per day" rule, when a check fails, when the registry counter looks high, once the registry looks healthy again, and when the files are only touched incidentally during unrelated work. If there is evidence that the volume is causing harm, report it with the evidence and leave the values in place; see the watch list below for what actually counts as evidence. Only an explicit owner instruction naming a new number changes them.
+**These numbers are intentional. Do not change them in either direction.** No agent should reduce them, introduce a lower ceiling or clamp, or jump to the retired 22,500/day plan on its own initiative. That holds when a code review or checklist flags the volume, when another document still quotes an older total, when a check fails, when the registry counter looks high, once the registry looks healthy again, and when the files are only touched incidentally during unrelated work. If there is evidence that the volume is causing harm, report it with the evidence and leave the values in place; see the watch list below for what actually counts as evidence. Only an explicit owner instruction naming a new number changes them.
 
 ### Why the volume is this high
 
