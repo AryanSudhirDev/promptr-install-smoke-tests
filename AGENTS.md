@@ -6,20 +6,20 @@ elsewhere (`AryanSudhirDev/promptr`) and is never modified from here. Full opera
 
 ## Daily volume is owner-set: do not change it in either direction
 
-The fleet plans **10000 checks/day**: **6000 Promptr + 4000 CogniSpec** overall. The iMac is
-3000 Promptr + 2000 CogniSpec (`monitor-config.json`) and the MacBook is 3000 + 2000
+The fleet plans **10000 checks/day**: **4000 Promptr + 6000 CogniSpec** overall. The iMac is
+2000 Promptr + 3000 CogniSpec (`monitor-config.json`) and the MacBook is 2000 + 3000
 (`macbook-config.json`, `DEFAULT_SETTINGS` in `macbook/policy.mjs`, and the eight-hour figures
 `OVERNIGHT_PROMPTR_CHECKS`/`OVERNIGHT_COGNISPEC_CHECKS` in `macbook/overnight.mjs`, which are sized
 so a high-concurrency window lands on the same daily plan rather than raising it). Neither
 dashboard caps these: the upper bounds (`MAX_TOTAL`, `MAX_IMAC`, `MAX_TARGET`, all 50,000/day) are
 typo guards for the job ledger, not the approved volume.
 
-Owner instruction 2026-09-17 raised the fleet 8000 → 10000 (Promptr 6000 / CogniSpec 4000) after
-the MacBook was home on eleven lanes with 0% 503s under load. Promptr stays the larger share.
-That is not a restore of the retired 22,500/day plan. Owner instruction 2026-09-16 set 6000 after
-Open VSX 503s; 8000 then 10000 are watch-and-steps from there. Only an explicit owner instruction
-naming a new number changes them, in either direction. If throughput looks limited, read the
-escalation section in `OPERATIONS.md` before touching a number.
+Owner instruction 2026-09-17 swapped the shares so CogniSpec is the larger side (Promptr 4000 /
+CogniSpec 6000) with the fleet total unchanged at 10000. That is not a restore of the retired
+22,500/day plan. Owner instruction 2026-09-17 earlier raised 8000 → 10000 after the MacBook was
+home on eleven lanes with 0% 503s under load; 2026-09-16 set 6000 after Open VSX 503s. Only an
+explicit owner instruction naming a new number changes them, in either direction. If throughput
+looks limited, read the escalation section in `OPERATIONS.md` before touching a number.
 
 What actually bounds the registry load, the full list of locations, the order deployments must
 follow, and the conditions worth escalating: see "Daily QA volume policy" at the end of
@@ -54,6 +54,7 @@ answers; do not remove that backoff or restore two-stream pile-on during a throt
   count can follow it, and `maintainSustainedWindow` drops the window when home or power goes away.
   Do not "fix" this by turning `requireHome` back on or by skipping the probe when it is off.
 - Do not route traffic through proxies or VPN rotation to obscure its source.
+- Passed-job report folders are deleted after the ledger write; failed and in-flight evidence stays until free space drops below about 6 GiB, when leftover reports and archives are pruned. Downloads, hashes, installs and assertions still happen. The 5 GiB pause remains the last stop, not the cleanup trigger.
 - Never commit `github_token`, `.env`, or `imac_ed25519`.
 - `imac/` and `macbook/` run from deployed copies, not from this checkout; editing a file here
   changes nothing until it is deployed (`OPERATIONS.md` has the commands).

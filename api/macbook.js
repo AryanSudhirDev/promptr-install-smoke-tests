@@ -9,7 +9,7 @@ const ORIGINS = new Set(['https://aryansudhirdev.github.io', 'https://promptr-qa
 const FIELDS = ['enabled', 'minBatteryPercent', 'pollIntervalMinutes', 'requireAC', 'requireHome', 'promptrDailyTotal', 'cognispecDailyTotal'];
 // Defaults are the current plan; MAX_TARGET is only a typo guard, not the approved volume. It must stay
 // equal to the bounds in macbook/policy.mjs and imac/macbook-broker.mjs, which enforce it last.
-const DEFAULT_TARGETS = {promptrDailyTotal:3000,cognispecDailyTotal:2000}, MAX_TARGET = 50000;
+const DEFAULT_TARGETS = {promptrDailyTotal:2000,cognispecDailyTotal:3000}, MAX_TARGET = 50000;
 const isBool = v => typeof v === 'boolean';
 const isIntInRange = (v, min, max) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
