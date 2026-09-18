@@ -35,21 +35,21 @@ test('overnight adds lanes only when Docker RAM can hold extra 2 GiB containers'
  assert.equal(dockerGiB(8320954368),7.7);
 });
 
-test('an eight-hour window keeps the 2000 + 2000 MacBook plan instead of raising it',()=>{
+test('an eight-hour window keeps the 3000 + 2000 MacBook plan instead of raising it',()=>{
  const overnight=startOvernightState({now,hours:8});
- const plan=overnightClaimPlan({promptrDailyTotal:2000,cognispecDailyTotal:2000},{overnight,memTotalBytes:gib(24),now});
+ const plan=overnightClaimPlan({promptrDailyTotal:3000,cognispecDailyTotal:2000},{overnight,memTotalBytes:gib(24),now});
  assert.equal(plan.workers,11);
- assert.equal(plan.promptrNightChecks,666);
+ assert.equal(plan.promptrNightChecks,1000);
  assert.equal(plan.cognispecNightChecks,666);
- assert.equal(plan.nightChecks,1332);
+ assert.equal(plan.nightChecks,1666);
  // Eleven lanes could compute far more than the plan asks for; the plan, not the hardware, is
  // the limit, so high concurrency buys slack rather than extra volume.
  assert.ok(plan.computePerHour>plan.perHour*10);
- assert.equal(plan.promptrDailyTotal,2000);
+ assert.equal(plan.promptrDailyTotal,3000);
  assert.equal(plan.cognispecDailyTotal,2000);
- const day=overnightClaimPlan({promptrDailyTotal:2000,cognispecDailyTotal:2000},{overnight:null,memTotalBytes:gib(24),now});
- assert.deepEqual({promptrDailyTotal:day.promptrDailyTotal,cognispecDailyTotal:day.cognispecDailyTotal,workers:day.workers},{promptrDailyTotal:2000,cognispecDailyTotal:2000,workers:3});
- assert.equal(overnightNightChecks({workers:3,hours:8}).nightChecks,1332);
+ const day=overnightClaimPlan({promptrDailyTotal:3000,cognispecDailyTotal:2000},{overnight:null,memTotalBytes:gib(24),now});
+ assert.deepEqual({promptrDailyTotal:day.promptrDailyTotal,cognispecDailyTotal:day.cognispecDailyTotal,workers:day.workers},{promptrDailyTotal:3000,cognispecDailyTotal:2000,workers:3});
+ assert.equal(overnightNightChecks({workers:3,hours:8}).nightChecks,1666);
 });
 
 test('overnight window is time-bounded and expires closed',()=>{
@@ -67,9 +67,9 @@ test('a full day is a valid window and keeps the same planned totals as an eight
  assert.equal(SUSTAINED_HOURS,24);
  const overnight=startOvernightState({now,hours:SUSTAINED_HOURS});
  assert.equal(overnightActive(overnight,now+23*3600000),true);
- const plan=overnightClaimPlan({promptrDailyTotal:2000,cognispecDailyTotal:2000},{overnight,memTotalBytes:gib(24),now});
+ const plan=overnightClaimPlan({promptrDailyTotal:3000,cognispecDailyTotal:2000},{overnight,memTotalBytes:gib(24),now});
  assert.equal(plan.workers,11);
- assert.equal(plan.promptrDailyTotal,2000);
+ assert.equal(plan.promptrDailyTotal,3000);
  assert.equal(plan.cognispecDailyTotal,2000);
 });
 
