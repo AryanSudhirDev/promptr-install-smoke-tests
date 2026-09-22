@@ -1,25 +1,25 @@
 {
-  "updatedAt": "2026-09-22T21:09:09.214Z",
+  "updatedAt": "2026-09-22T21:38:52.727Z",
   "openvsx": {
     "version": "1.5.6",
-    "downloadCount": 108081
+    "downloadCount": 108259
   },
   "extensions": {
     "promptr": {
       "version": "1.5.6",
-      "downloadCount": 108081
+      "downloadCount": 108259
     },
     "cognispec": {
       "version": "0.1.0",
-      "downloadCount": 106496
+      "downloadCount": 106752
     }
   },
   "github": {
     "dailyTotal": 90,
-    "checksToday": 81,
+    "checksToday": 82,
     "failedToday": 0,
-    "runsToday": 48,
-    "lastRunAt": "2026-09-22T21:07:06Z",
+    "runsToday": 49,
+    "lastRunAt": "2026-09-22T21:37:07Z",
     "countsComplete": true,
     "day": "2026-09-22"
   },
