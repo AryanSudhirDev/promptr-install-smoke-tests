@@ -208,8 +208,8 @@ exists on the Daytona account. Needs a `.env` with `DAYTONA_API_KEY`. The GitHub
 
 - Every check must do real verification: download + hash, install, activation, assertions.
   Do not reduce a check to "download only".
-- Daily volume is owner-set and is not an agent's call. The fleet plans 10000 checks/day: 4000
-  Promptr + 6000 CogniSpec overall (iMac 2000+3000, MacBook 2000+3000). Never lower these values,
+- Daily volume is owner-set and is not an agent's call. The fleet plans 14000 checks/day: 4000
+  Promptr + 10000 CogniSpec overall (iMac 2000+4000, MacBook 2000+6000). Never lower these values,
   add a tighter clamp, or swap Promptr back to the larger share on your own
   initiative; report concerns instead. Rationale, all locations and the safe change order: "Daily QA
   volume policy" at the end of this file.
@@ -358,9 +358,11 @@ This does not change any planned total: a window of any length scales to the sam
 
 ### Registry 503 collapse and the reduction to 6000/day (2026-09-16)
 
-**Current numbers, superseding every figure above: 10000 checks/day.** iMac `imacDailyTotal: 2000` + `cognispecDailyTotal: 3000` in `monitor-config.json`; MacBook 2000 + 3000 in `macbook-config.json` and in `DEFAULT_SETTINGS`; `OVERNIGHT_PROMPTR_CHECKS: 666` + `OVERNIGHT_COGNISPEC_CHECKS: 1000` in `macbook/overnight.mjs`. The overnight constants are the eight-hour figures `overnightNightChecks` scales by window length; they are chosen so a window of any length lands back on the 2000/3000 plan instead of raising it (`666*24/8 = 1998`, then `max(2000, ceil(1998))`; `1000*24/8 = 3000`). High concurrency still does not change volume — it only spends the same MacBook plan faster.
+**Current numbers, superseding every figure above: 14000 checks/day.** iMac `imacDailyTotal: 2000` + `cognispecDailyTotal: 4000` in `monitor-config.json`; MacBook 2000 + 6000 in `macbook-config.json` and in `DEFAULT_SETTINGS`; `OVERNIGHT_PROMPTR_CHECKS: 666` + `OVERNIGHT_COGNISPEC_CHECKS: 2000` in `macbook/overnight.mjs`. The overnight constants are the eight-hour figures `overnightNightChecks` scales by window length; they are chosen so a window of any length lands back on the 2000/6000 MacBook plan instead of raising it (`666*24/8 = 1998`, then `max(2000, ceil(1998))`; `2000*24/8 = 6000`). High concurrency still does not change volume — it only spends the same MacBook plan faster.
 
-Owner instruction 2026-09-17: after the MacBook was home on eleven lanes with 0% 503s under load (352 passed / 30 min), step the fleet 8000 → 10000. A later owner instruction the same day **swapped the shares** so CogniSpec is the larger side: 4000 Promptr / 6000 CogniSpec (iMac 2000+3000, MacBook 2000+3000). Combined volume is unchanged. This is a watch-and-step, not a restore of 22,500/day. If 503s climb toward 15–30% or the cooldown latches for hours, do not raise further.
+Owner instruction 2026-10-01: raise CogniSpec 6000 → 10000 (iMac 3000→4000, MacBook 3000→6000) and leave Promptr at 4000. Extra CogniSpec goes mostly to the MacBook’s eleven home lanes; the always-on iMac still carries 4000 so away-from-home days (three MacBook lanes) do not drop the whole increase. Combined fleet is 14000 planned checks/day. This is a watch-and-step, not a restore of 22,500/day. If 503s climb toward 15–30% or the cooldown latches for hours, do not raise further.
+
+Owner instruction 2026-09-17: after the MacBook was home on eleven lanes with 0% 503s under load (352 passed / 30 min), step the fleet 8000 → 10000. A later owner instruction the same day **swapped the shares** so CogniSpec is the larger side: 4000 Promptr / 6000 CogniSpec (iMac 2000+3000, MacBook 2000+3000). Combined volume was unchanged at that step.
 
 What happened, measured rather than inferred. Throughput fell from 877 checks in the 00:00 UTC hour to 6 in 04:00 and 2 in 05:00, with 2,144 jobs queued and 2,877 already expired unrun. Of 219 registry requests over three hours, **78 returned HTTP 503 (35.6%)**, spread evenly across both extensions (Promptr 34 of 101, CogniSpec 44 of 118), so it was not specific to either one.
 
