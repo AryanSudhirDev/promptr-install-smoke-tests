@@ -1,5 +1,5 @@
 {
-  "enabled": true,
+  "enabled": false,
   "minBatteryPercent": 40,
   "pollIntervalMinutes": 10,
   "requireAC": false,
