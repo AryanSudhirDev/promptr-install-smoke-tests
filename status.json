@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-11T23:55:58.076Z",
+  "updatedAt": "2026-10-12T00:08:12.289Z",
   "openvsx": {
     "version": "1.5.6",
     "downloadCount": 631633
@@ -16,12 +16,12 @@
   },
   "github": {
     "dailyTotal": 90,
-    "checksToday": 90,
+    "checksToday": 2,
     "failedToday": 0,
-    "runsToday": 52,
-    "lastRunAt": "2026-10-11T23:54:59Z",
+    "runsToday": 1,
+    "lastRunAt": "2026-10-12T00:07:01Z",
     "countsComplete": true,
-    "day": "2026-10-11"
+    "day": "2026-10-12"
   },
   "imac": {
     "dailyTotal": 2000,
