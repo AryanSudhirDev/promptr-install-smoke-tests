@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-23T07:10:26.970Z",
+  "updatedAt": "2026-10-23T07:39:09.599Z",
   "openvsx": {
     "version": "1.5.6",
     "downloadCount": 873081
@@ -11,16 +11,16 @@
     },
     "cognispec": {
       "version": "0.1.0",
-      "downloadCount": 1139638
+      "downloadCount": 1141968
     }
   },
   "github": {
     "dailyTotal": 90,
-    "checksToday": null,
-    "failedToday": null,
-    "runsToday": 17,
-    "lastRunAt": "2026-10-23T07:07:01Z",
-    "countsComplete": false,
+    "checksToday": 35,
+    "failedToday": 0,
+    "runsToday": 18,
+    "lastRunAt": "2026-10-23T07:37:01Z",
+    "countsComplete": true,
     "day": "2026-10-23"
   },
   "imac": {
